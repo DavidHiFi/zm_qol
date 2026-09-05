@@ -20,8 +20,8 @@ REM    declare and ZERO overlap with its raw sources in zone_assets\.
 REM ============================================================================
 setlocal
 set "PROJ=%~dp0"
-set "OAT=%PROJ%..\..\oat-windows"
-set "BO2=H:\Backups\Game Files\pluto_t6_full_game"
+set "OAT=%PROJ%..\..\Resources\oat-windows"
+set "BO2=F:\SteamLibrary\steamapps\common\Call of Duty Black Ops II"
 if not exist "%OAT%\Linker.exe" ( echo ERROR: Linker.exe not found. & exit /b 1 )
 set "TMPSRC=%TEMP%\zmqol_wpnfix_src"
 if not exist "%TMPSRC%" mkdir "%TMPSRC%"
@@ -29,9 +29,11 @@ copy /y "%PROJ%zone_source\wpnfix_donor\mod.zone.source" "%TMPSRC%\mod.zone" >nu
 "%OAT%\Linker.exe" ^
   --load "%BO2%\zone\all\zm_nuked.ff" ^
   --load "%BO2%\zone\all\zm_tomb.ff" ^
+  --base-folder "%TMPSRC%" ^
   --add-source-search-path "%TMPSRC%" ^
   --output-folder "%TMPSRC%\out" ^
   mod
 if errorlevel 1 ( echo ERROR: link failed. & exit /b 1 )
+if not exist "%TMPSRC%\out\mod.ff" ( echo ERROR: no mod.ff produced. & exit /b 1 )
 copy /y "%TMPSRC%\out\mod.ff" "%PROJ%zone_source\wpnfix_donor\mod.ff" >nul
 echo   wpnfix donor rebuilt. Now run build_ff.bat.

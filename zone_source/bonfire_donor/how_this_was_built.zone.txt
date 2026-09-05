@@ -3,11 +3,11 @@ bonfire_donor\mod.ff - HOW IT WAS BUILT (2026-09-05, v2.12.0)
 Source:   Zombies Declassified BETA 1 (Logo2K's PC port of the cancelled BO2 DLC5), file
           storage\t6\zone\zm_pentagon.ff - the T6 build of "Five", the one map in any Call of Duty
           that ships Bonfire Sale. It is a Treyarch-linked DEV zone that the stock OAT cannot read.
-Tool:     H:\Claude\oat-dlc5\Linker.exe - OpenAssetTools main@7d027e8 (v0.33) built from source with
-          the block-type and allocation patches described in H:\Claude\oat-dlc5\README.txt.
+Tool:     H:\Claude\Resources\oat-dlc5\Linker.exe - OpenAssetTools main@7d027e8 (v0.33) built from source with
+          the block-type and allocation patches described in H:\Claude\Resources\oat-dlc5\README.txt.
 Command (Git Bash):
           export MSYS2_ARG_CONV_EXCL='*' OAT_MIN_BLOCK_MB=384
-          /h/Claude/oat-dlc5/Linker.exe \
+          /h/Claude/Resources/oat-dlc5/Linker.exe \
             --load "H:/Claude/Copy of ZombiesDeclassified_BETA1 (1)-002/ZombiesDeclassified_BETA1/storage/t6/zone/zm_pentagon.ff" \
             --base-folder "<this folder>" --add-source-search-path "<this folder>" \
             --output-folder "<this folder>/out" mod
