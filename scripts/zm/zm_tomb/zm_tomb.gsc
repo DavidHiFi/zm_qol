@@ -1567,42 +1567,54 @@ added_weapons()
         include_weapon( "rpd_upgraded_zm", 0 );
         add_zombie_weapon( "rpd_zm", "rpd_upgraded_zm", &"ZOMBIE_WEAPON_RPD", 50, "wpck_rpd", "", undefined, 1 );
 
-      //  🛑 THE GATE. Everything ABOVE this line is precached by the root script
-      //  on every map anyway (quality_of_life.gsc::init()'s 72 precacheitem
-      //  calls), so holding those back would cost the box a gun and free no
-      //  slot. Only the pairs below are precached HERE and nowhere else.
-      if ( !zmqol_loc_spawns_perk_machines() )
-      {
-        include_weapon( "saritchqol_zm" );
-        include_weapon( "saritchqol_upgraded_zm", 0 );
-        add_zombie_weapon( "saritchqol_zm", "saritchqol_upgraded_zm", &"ZOMBIE_WEAPON_SARITCH", 50, "wpck_sidr", "", undefined, 1 );
-
-        include_weapon( "barretm82qol_zm" );
-        include_weapon( "barretm82qol_upgraded_zm", 0);
-        add_zombie_weapon( "barretm82qol_zm", "barretm82qol_upgraded_zm", &"ZOMBIE_WEAPON_BARRETM82", 50, "sniper", "", undefined );
-
-        include_weapon( "mp5kqol_zm" );
-        include_weapon( "mp5kqol_upgraded_zm", 0);
-        add_zombie_weapon( "mp5kqol_zm", "mp5kqol_upgraded_zm", &"ZOMBIE_WEAPON_MP5K", 1000, "smg", "", undefined );
-
-        include_weapon( "tar21qol_zm" );
-        include_weapon( "tar21qol_upgraded_zm", 0);
-        add_zombie_weapon( "tar21qol_zm", "tar21qol_upgraded_zm", &"ZOMBIE_WEAPON_TAR21", 50, "wpck_x95l", "", undefined, 1 );
-
-        include_weapon( "saiga12qol_zm" );
-        include_weapon( "saiga12qol_upgraded_zm", 0);
-        add_zombie_weapon( "saiga12qol_zm", "saiga12qol_upgraded_zm", &"ZOMBIE_WEAPON_SAIGA12", 50, "wpck_saiga12", "", undefined, 1 );
-
-        include_weapon( "judgeqol_zm" );
-        include_weapon( "judgeqol_upgraded_zm", 0);
-        add_zombie_weapon( "judgeqol_zm", "judgeqol_upgraded_zm", &"ZOMBIE_WEAPON_JUDGE", 50, "wpck_judge", "", undefined, 1 );
-
-        include_weapon( "usrpg_zm" );
-        include_weapon( "usrpg_upgraded_zm", 0);
-        add_zombie_weapon( "usrpg_zm", "usrpg_upgraded_zm", &"ZOMBIE_WEAPON_USRPG", 50, "wpck_rpg", "", undefined, 1 );
-      }
-      else
-        println( "[zm_qol] crazy place: added_weapons SKIPPED - 7 pair(s) held back, 14 precache slot(s) freed for the perk machines" );
+      // ======================================================================
+      //  🛑 v2.14.4 - THESE SEVEN PAIRS ARE HELD BACK ON ALL OF ORIGINS
+      //  NOW, NOT JUST THE CRAZY PLACE, AND CLASSIC ORIGINS IS WHY.
+      //
+      //  Boot 2026-09-06 6:41 PM, CLASSIC Origins (location=tomb), crash dump
+      //  plutonium-r5346-t6zm-2026-09-06_06-41-43.txt:
+      //      last gsc error message 'unknown weapon 'mp5kqol_upgraded_zm''
+      //      gsc callstack: maps/mp/zombies/_zm_weapons::include_zombie_weapon
+      //        maps/mp/zombies/_zm_utility::include_weapon
+      //        scripts/zm/zm_tomb/zm_tomb::added_weapons
+      //  Same weapon, same stack and the same position in this list as the
+      //  v2.14.0 Crazy Place crash. The precache table runs out at EXACTLY the
+      //  same include on both locations.
+      //
+      //  🛑 SO v2.14.2'S STATED MECHANISM WAS WRONG, AND IS CORRECTED HERE.
+      //  It blamed the Crazy Place's four perk machines: _zm_perks::init()
+      //  returns at :52 before default_vending_precaching() when a location has
+      //  no vending triggers, so a machine-less survival location skips ten
+      //  precacheitem calls. That much is true - but CLASSIC Origins has
+      //  machines too, pays the same ten, and was over the ceiling all along.
+      //  Measured, not inferred: maps\mp\zm_tomb_classic.gsc and
+      //  maps\mp\zm_tomb_craftables.gsc contain ZERO precacheitem and ZERO
+      //  include_weapon calls, so classic and the Crazy Place demand the same
+      //  weapon slots to the slot. v2.14.2's "classic Origins boots today at
+      //  demand D" was never measured; this boot disproves it.
+      //
+      //  The Crazy Place got past this point once the fourteen slots were
+      //  freed, so the same fourteen carry classic. Classic died on include #6
+      //  of this block - five slots in - so NINE is the measured minimum and
+      //  fourteen leaves five spare.
+      //
+      //  ⚠️ WHAT THE PLAYER LOSES, PLAINLY: on Origins, every location, the
+      //  box no longer offers the Saritch, the Barrett M82, the MP5K, the MTAR,
+      //  the Saiga-12, the Judge or the RPG. The other thirteen added pairs
+      //  stay and every other map is untouched. The alternative was a map that
+      //  does not load at all. Keeping the seven means finding nine slots
+      //  elsewhere on this map first, and the only place left is the root
+      //  script's own precache block - the stock saritch / barretm82 / m16
+      //  copies it precaches are dead weight on Origins (zmqol_tomb_weapon()
+      //  swaps the m16 out, and the box registers the qol copies of the other
+      //  two) but they are worth eight slots, one short of nine.
+      //
+      //  🛑 zm_tomb.csc::include_weapons() HOLDS BACK THE SAME SEVEN. Its
+      //  include_weapon ends in addzombieboxweapon( w, getweaponmodel( w ), ...)
+      //  - a model lookup on a weapon nothing precached, which is the as50_zm
+      //  client crash. Change one list, change both.
+      // ======================================================================
+        println( "[zm_qol] origins: added_weapons holds back 7 pair(s) - 14 precache slot(s) freed, ALL locations (v2.14.4)" );
 
         // ====================================================================
         //  🛑 THESE TWO PAIRS STAY ON EVERY LOCATION, THE CRAZY PLACE INCLUDED,

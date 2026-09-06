@@ -28,16 +28,40 @@ main()
 //  start_zombie_gametype() bails, the loading state is never released, and the
 //  map hangs on the loading screen instead of starting.
 //
-//  Both new modes point crazy_place at zm_tomb_classic's client location
-//  functions. That is the same technique already shipping on Die Rise and
-//  Buried, and Origins has exactly one client location script, so it is the
-//  only correct target. It also keeps the clientfield sets symmetrical: the
-//  client only registers a location's buildables when a location script
-//  actually runs (_zm_buildables.csc registers on the FIRST buildable added),
-//  which is what produced "Clientfield buildable in set [toplayer] is not
-//  registered on the client" on Die Rise before the same fix.
+//  🛑 v2.14.4 - THE THREE LOCATION FUNCS ARE undefined, AND THAT IS MEASURED.
+//  v2.14.3 pointed crazy_place at zm_tomb_classic's client funcs, copying what
+//  already ships on Die Rise and Buried. Booting Origins survival on 2026-09-06
+//  at 6:40 PM ended in EXE_CLIENT_FIELD_MISMATCH, and the game's own dump named
+//  every field: 36 in set [world] (piece_quadrotor_*, piece_riotshield_*,
+//  piece_staff_*, piece_record_*, staff_player1-4, quest_state1-4) plus
+//  "craftable" in set [toplayer], all "not registered on the server".
 //
-//  🛑 NOT verified in game yet - Origins survival has never booted.
+//  WHY, from the dumps rather than from the names:
+//    * clientscripts\mp\zm_tomb_classic.csc is NOTHING BUT craftables - its
+//      precache() and main() are empty and premain() is two calls,
+//      zm_tomb_craftables::include_craftables() and ::init_craftables(). The
+//      second one calls register_clientfields(), which is those 36 world
+//      fields; add_zombie_craftable() then makes _zm_craftables.csc register
+//      "craftable" on [toplayer]. That is the whole 37.
+//    * On the SERVER those same registrations live in
+//      maps\mp\zm_tomb_craftables::init_craftables, and its only caller is
+//      maps\mp\zm_tomb_classic.gsc - the zclassic location. The Crazy Place
+//      runs scripts\zm\locs\zm_tomb_loc_crazy_place instead, which has no
+//      craftables at all, so the server registers none of the 37.
+//    * Die Rise is NOT the same case and its fix stays: there the survival
+//      locations run stock scripts that DO include the buildables server-side,
+//      so its client half has to run them too.
+//
+//  Working precedent: BO2-Reimagined's own client zm_tomb replacement
+//  registers all four of its Origins survival arenas exactly this way -
+//  add_map_location_gamemode( mode, loc, undefined, undefined, undefined ).
+//
+//  Registering the mode with add_map_gamemode is still REQUIRED and still does
+//  the real work: _zm.csc::start_zombie_gametype returns early unless
+//  level.gamemode_map_location_main[gamemode] is defined, and add_map_gamemode
+//  is what sets it to []. The per-location entries are then undefined and every
+//  call site is isdefined-guarded, so nothing runs client-side for this
+//  location - which is exactly what the server does.
 // ============================================================================
 init_gamemodes()
 {
@@ -47,8 +71,10 @@ init_gamemodes()
 
     add_map_location_gamemode( "zclassic", "tomb", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
 
-    add_map_location_gamemode( "zstandard", "crazy_place", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
-    add_map_location_gamemode( "zgrief", "crazy_place", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
+    //  v2.14.4 - all three funcs undefined. See the banner above: pointing them
+    //  at zm_tomb_classic is what produced EXE_CLIENT_FIELD_MISMATCH.
+    add_map_location_gamemode( "zstandard", "crazy_place", undefined, undefined, undefined );
+    add_map_location_gamemode( "zgrief", "crazy_place", undefined, undefined, undefined );
 }
 
 include_weapons()
@@ -170,28 +196,14 @@ include_weapons()
     include_weapon( "xm8_upgraded_zm", 0 );
     include_weapon( "rpd_zm" );
     include_weapon( "rpd_upgraded_zm", 0 );
-    //  🛑 THE GATE - twin of zm_tomb.gsc::added_weapons()'s. Everything above is
-    //  precached by the root script on every map regardless, so only the pairs
-    //  below buy the Crazy Place a slot by being held back.
-    if ( getdvar( "ui_zm_mapstartlocation" ) != "crazy_place" )
-    {
-    include_weapon( "saritchqol_zm" );
-    include_weapon( "saritchqol_upgraded_zm", 0 );
-    include_weapon( "barretm82qol_zm" );
-    include_weapon( "barretm82qol_upgraded_zm", 0);
-    include_weapon( "mp5kqol_zm" );
-    include_weapon( "mp5kqol_upgraded_zm", 0);
-    include_weapon( "tar21qol_zm" );
-    include_weapon( "tar21qol_upgraded_zm", 0);
-    include_weapon( "saiga12qol_zm" );
-    include_weapon( "saiga12qol_upgraded_zm", 0);
-    include_weapon( "judgeqol_zm" );
-    include_weapon( "judgeqol_upgraded_zm", 0);
-    include_weapon( "usrpg_zm" );
-    include_weapon( "usrpg_upgraded_zm", 0);
-    }
-    else
-        println( "[zm_qol] CLIENT crazy place: added weapons SKIPPED - 7 pair(s), matching the server" );
+    //  🛑 v2.14.4 - THE SEVEN PAIRS ARE GONE ON ALL OF ORIGINS, not just
+    //  the Crazy Place. Exact twin of the same removal in
+    //  zm_tomb.gsc::added_weapons() - read the banner there for the classic
+    //  Origins crash dump that forced it. The two lists must never disagree:
+    //  include_weapon() here ends in addzombieboxweapon( w, getweaponmodel( w ),
+    //  ... ), a model lookup on a weapon the server never precached, which is
+    //  the as50_zm client crash in zm_expanded.csc::zmqol_mp_weapons_init().
+    println( "[zm_qol] CLIENT origins: added weapons holds back 7 pair(s), matching the server (v2.14.4)" );
 
     //  🛑 OUTSIDE THE SKIP ON PURPOSE - twin of the same two pairs in
     //  zm_tomb.gsc::added_weapons(). The root script precaches and registers
