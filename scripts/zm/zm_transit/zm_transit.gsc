@@ -811,6 +811,12 @@ main_o()
     collision = spawn( "script_model", ( -6896, 4744, 0 ), 1 );
     collision setmodel( "zm_collision_transit_busdepot_survival" );
     collision disconnectpaths();
+
+    //  v2.14.0 - the fire pit the bus pulls away from is open again. Called
+    //  HERE, straight after setup_standard_objects() spawned the props and
+    //  after stock's own collision spawn, so both exist and nothing waits.
+    zmqol_busdepot_open_fire_pit( collision );
+
     flag_wait( "initial_blackscreen_passed" );
     flag_set( "power_on" );
     level setclientfield( "zombie_power_on", 1 );
@@ -823,6 +829,126 @@ main_o()
             door trigger_off();
         }
     }
+}
+
+// ============================================================================
+//  BUS DEPOT SURVIVAL - THE FIRE PIT IS OPEN AGAIN                   (v2.14.0)
+// ----------------------------------------------------------------------------
+//  User, 2026-09-06: "for bus depot survival, remove the car that is on top of
+//  the fire pit where the bus usually first departures from at spawn, because
+//  in tranzit the fire pit is open, the reimagined mod does this exact thing
+//  for bus depot survival."
+//
+//  WHAT THE STOCK MAP PUTS THERE - read out of the zm_transit mapents dump
+//  (T6-Data-Archive zm_transit.d3dbsp), not assumed:
+//
+//      info_volume              depot_lava_pit / lava_volume  (-6698, 4771, -101)
+//      trigger_multiple         lava_damage / fire            (-6698, 4771,  -95)
+//      info_vehicle_node_rotate BUS_START / depot             (-6527, 4770, -28.6)
+//
+//  so the pit is exactly the spot the bus first pulls away from, as described.
+//  Bus Depot survival then dresses FOUR "game_mode_object" structs over it.
+//  _zm_gametype::setup_standard_objects( "station" ) spawns each one as a plain
+//  script_model AT its struct origin, so these are the map's own numbers:
+//
+//      veh_t6_civ_smallwagon_dead     (-6663.96, 4816.34, -71.8)   <- "the car"
+//      veh_t6_civ_microbus_dead       (-6807.05, 4765.23, -68.01)
+//      veh_t6_civ_movingtrk_cab_dead  (-6652.9,  4767.7,   -6.73)
+//      p6_zm_rocks_small_cluster_01   (-6745.48, 4782.86, -79.01)
+//
+//  The map has NINE station barricades; the other five stand at the play-area
+//  edge (x -7900..-8100 and -5787) and are deliberately left alone.
+//
+//  🛑 DELETING THE PROPS ALONE WOULD NOT OPEN ANYTHING. The pit itself is
+//  plugged by the collision model handed in here - zm_collision_transit_
+//  busdepot_survival, spawned by stock's own station main() three lines above
+//  the call. Reimagined deletes it too, in scripts\zm\zm_transit\
+//  zm_transit_reimagined.gsc::busdepot_remove_lava_collision(), whose own
+//  comment says the pit plug and the play-area edge collision are the SAME
+//  entity - which is why it then spawns three replacement walls at the edge.
+//  Both halves are ported: the deletion without the walls would open the map
+//  edge, which is a regression, not a feature.
+//
+//  ⚠️ ONE THING COULD NOT BE MEASURED OFFLINE, and is stated rather than
+//  hidden: what that collision model actually covers. OAT dumps all four
+//  zm_collision_transit_*_survival models as the identical 8-vertex 512-unit
+//  cube (they plainly cannot all be one cube), so the real collision lives in
+//  data the Unlinker does not export. Reimagined's shipped, played behaviour is
+//  the only evidence there is, and the three wall positions below are its
+//  numbers verbatim.
+//
+//  📝 NO connectpaths() BEFORE THE DELETE, on purpose - Reimagined does not
+//  call one either. The nodes stock disconnected are the ones over the plug;
+//  with the pit open again they SHOULD stay disabled, exactly as in classic.
+//
+//  📝 SURVIVAL ONLY. This runs from main_o(), which replaces
+//  maps\mp\zm_transit_standard_station::main - registered for "transit" on
+//  zstandard alone. Grief's Bus Depot goes through zm_transit_grief_station and
+//  is untouched; the four props do not exist there anyway, their script_string
+//  being "zstandard znml zcleansed".
+//
+//  📝 collision_wall_512x512x10_standard NEEDS NO PRECACHE HERE. Stock
+//  zm_transit.gsc:203 threads zm_transit_ffotd::main_start() as the FIRST
+//  statement of the map's own main(), and that precaches it unconditionally,
+//  long before any location main runs.
+// ============================================================================
+zmqol_busdepot_open_fire_pit( e_pit_collision )
+{
+    a_models = [];
+    a_origins = [];
+
+    a_models[0] = "veh_t6_civ_smallwagon_dead";
+    a_origins[0] = ( -6663.96, 4816.34, -71.8 );
+    a_models[1] = "veh_t6_civ_microbus_dead";
+    a_origins[1] = ( -6807.05, 4765.23, -68.01 );
+    a_models[2] = "veh_t6_civ_movingtrk_cab_dead";
+    a_origins[2] = ( -6652.9, 4767.7, -6.73 );
+    a_models[3] = "p6_zm_rocks_small_cluster_01";
+    a_origins[3] = ( -6745.48, 4782.86, -79.01 );
+
+    n_deleted = 0;
+    a_ents = getentarray( "script_model", "classname" );
+
+    foreach ( e_ent in a_ents )
+    {
+        if ( !isdefined( e_ent.model ) )
+        {
+            continue;
+        }
+
+        for ( i = 0; i < a_models.size; i++ )
+        {
+            if ( e_ent.model != a_models[i] )
+            {
+                continue;
+            }
+
+            //  16 units. The origins above are the map's own and a barricade is
+            //  spawned AT its struct origin, so this only has to absorb float
+            //  printing error - never "near enough" guessing. Same rule as
+            //  scripts\zm\locs\loc_common::enable_wallbuys.
+            if ( distancesquared( e_ent.origin, a_origins[i] ) > 256 )
+            {
+                continue;
+            }
+
+            e_ent delete();
+            n_deleted++;
+            break;
+        }
+    }
+
+    if ( isdefined( e_pit_collision ) )
+    {
+        e_pit_collision delete();
+    }
+
+    //  The play-area edge, put back by hand. Reimagined's three positions.
+    scripts\zm\locs\loc_common::barrier( "collision_wall_512x512x10_standard", ( -5898, 4653, 0 ), ( 0, 55, 0 ), 1 );
+    scripts\zm\locs\loc_common::barrier( "collision_wall_512x512x10_standard", ( -8062, 4700, 0 ), ( 0, 70, 0 ), 1 );
+    scripts\zm\locs\loc_common::barrier( "collision_wall_512x512x10_standard", ( -7881, 5200, 0 ), ( 0, 70, 0 ), 1 );
+
+    println( "[zm_qol] busdepot fire pit: deleted " + n_deleted + " of 4 barricades (expect 4) + the pit collision, 3 edge walls up" );
 }
 
 zombie_exploding_death( zombie_dmg, trap )
