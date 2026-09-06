@@ -1582,7 +1582,7 @@ end
 --  prompt below. That is the whole of the reported "scuffed-ness".
 --
 --  The mod's own tabs, as of v2.12.5: GAME 1 15.0, GAME 2 15.0, GAME 3 1.0,
---  HUD 13.0, CHEATS 14.0. (GAME 1 and GAME 2 are the tabs called GAME and
+--  HUD 14.0 (v2.14.7), CHEATS 14.0. (GAME 1 and GAME 2 are the tabs called GAME and
 --  PATCHES before v2.12.5; both were already at the ceiling, which is why
 --  GAME 3 exists.) The stock tabs this file also builds: ADVANCED 15.0 (full).
 --  🛑 PATCHES IS NOW AT THE 15.0 CEILING - the next row has to displace one.
@@ -1849,8 +1849,13 @@ CoD.OptionsSettings.CreateQolHudTab = function (QolHudTab, LocalClientIndex)
 	local T = CoD.OptionsSettings.QolToggle
 	local C = CoD.OptionsSettings.QolChoice
 
-	-- HUD elements, and nothing else.                                13 rows
+	-- HUD elements, and nothing else.                                14 rows
 	T(QolHudButtons, LocalClientIndex, "HUD",               "hud_master",     "Master switch for the whole HUD.")
+	-- v2.14.7, user request (queued as B-CROSSHAIR, asked again 2026-09-06).
+	-- Sits next to HITMARKERS because that row's own description is about the
+	-- crosshair. ENABLED is stock. The GSC half is qol_options.gsc's
+	-- qol_opt_crosshair(), and its banner says why it writes three client dvars.
+	T(QolHudButtons, LocalClientIndex, "CROSSHAIR",         "crosshair",      "The crosshair in the middle of the screen.")
 	T(QolHudButtons, LocalClientIndex, "HITMARKERS",        "hitmarkers",     "Hit and kill markers on your crosshair.")
 	T(QolHudButtons, LocalClientIndex, "ROUND SUMMARY",     "round_summary",  "Stats pop-up after each round.")
 	-- v1.98.0, user request 2026-08-16.
@@ -1975,7 +1980,10 @@ CoD.OptionsSettings.CreateQolHudTab = function (QolHudTab, LocalClientIndex)
 	-- row. 13.0 pitches puts the hint line at 234 + 13*50 = 884 px, 152 px clear
 	-- of the ESC prompt at 1036, and the longest description here is 55 chars so
 	-- nothing wraps. Two full rows of headroom for the next HUD option.
-	return QolHudContainer                                          -- 13 total
+	-- v2.14.7 - CROSSHAIR spends one of those two: 14 rows = 14.0 pitches, hint
+	-- line at 234 + 14*50 = 934 px, still 102 px clear of the ESC prompt and a
+	-- row under the 15.0 ceiling this file measured on the SOUND tab.
+	return QolHudContainer                                          -- 14 total
 end
 
 -- ============================================================================

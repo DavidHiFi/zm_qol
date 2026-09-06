@@ -274,6 +274,36 @@ init()
     //  stock's own 30-second per-zombie loop, so it is live mid-match too.
     qol_opt_dvar( "no_bleedout", "0" );
 
+    //  ========================================================================
+    //  v2.14.7 - CROSSHAIR, user request (queued as B-CROSSHAIR, asked again
+    //  2026-09-06: *"where's the crosshair on/off toggle in the hud menu like i
+    //  asked for"*). The HUD tab.
+    //
+    //  1 = ENABLED = stock, the crosshair the game has always drawn. 0 hides it.
+    //
+    //  🛑 IT TAKES THREE CLIENT DVARS, NOT ONE, AND THAT IS DELIBERATE.
+    //  cg_drawCrosshair is the right dvar - Plutonium's own
+    //  dvar_descriptions.json calls it "Turn on weapon crosshair" - but the
+    //  game's console printed `cg_drawCrosshair is cheat protected` three times
+    //  in this machine's own console_zm.log while execing its default cfgs, so a
+    //  plain write to it is refused from a config. Whether setclientdvar is
+    //  refused the same way is NOT established here and nothing in the stock
+    //  dump or in any mod source on this machine sets it, so the switch also
+    //  writes cg_crosshairAlpha and cg_crosshairAlphaMin, which are NOT on that
+    //  cheat-protected list and hide the crosshair on their own by drawing it
+    //  fully transparent. Whichever of the two routes the build allows, the
+    //  crosshair goes.
+    //
+    //  The restore values are the game's own defaults, read out of the dvar dump
+    //  in console_zm.log: cg_drawCrosshair 1, cg_crosshairAlpha 1,
+    //  cg_crosshairAlphaMin 0.5.
+    //
+    //  📝 These are archived client dvars, so leaving the row OFF and then
+    //  removing the mod would leave the crosshair hidden. Turning the row back
+    //  on restores it, and so does one console line: cg_crosshairAlpha 1.
+    //  ========================================================================
+    qol_opt_dvar( "crosshair", "1" );
+
     //  v2.7.0 - NO LAVA DAMAGE, user request 2026-08-28, the PATCHES tab.
     //  TranZit-family maps only (Classic TranZit, Diner, Farm, Town, Bus Depot -
     //  all share mapname "zm_transit", told apart only by ui_zm_mapstartlocation).
@@ -830,6 +860,7 @@ qol_opt_player_init()
         self thread qol_opt_night_mode();
         self thread qol_opt_character();
         self thread qol_opt_hud_watcher();
+        self thread qol_opt_crosshair();
     }
 }
 
@@ -2798,5 +2829,56 @@ zmqol_hud_round_anchor( elem )
 
         elem.horzalign = "right";
         elem.x = 25 - n_extra_digits * 12;
+    }
+}
+
+// ============================================================================
+//  qol_opt_crosshair  -  the HUD tab's CROSSHAIR row                (v2.14.7)
+// ----------------------------------------------------------------------------
+//  Live in both directions: the row can be flipped mid-match and the next pass
+//  applies it. Seeded with -1 so the first pass always writes, which is what
+//  picks up a value the player left in their config from a previous session -
+//  and what puts the crosshair back for a player who joined with the row on.
+//
+//  See the banner over the qol_opt_dvar( "crosshair", ... ) registration for why
+//  three dvars are written instead of one.
+// ============================================================================
+qol_opt_crosshair()
+{
+    if ( zmqol_minimal() )
+        return;
+
+    self endon( "disconnect" );
+    level endon( "end_game" );
+
+    flag_wait( "initial_blackscreen_passed" );
+
+    n_last = -1;
+
+    for ( ;; )
+    {
+        n_now = getdvarintdefault( "crosshair", 1 ) != 0;
+
+        if ( n_now != n_last )
+        {
+            n_last = n_now;
+
+            if ( n_now )
+            {
+                self setclientdvar( "cg_drawCrosshair", 1 );
+                self setclientdvar( "cg_crosshairAlpha", 1 );
+                self setclientdvar( "cg_crosshairAlphaMin", 0.5 );
+            }
+            else
+            {
+                self setclientdvar( "cg_drawCrosshair", 0 );
+                self setclientdvar( "cg_crosshairAlpha", 0 );
+                self setclientdvar( "cg_crosshairAlphaMin", 0 );
+            }
+
+            println( "[zm_qol] crosshair -> " + n_now );
+        }
+
+        wait 1;
     }
 }
