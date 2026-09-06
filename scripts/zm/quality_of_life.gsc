@@ -19666,6 +19666,16 @@ zmqol_hud_round_anchor( elem )
 //  ----------------------------------------------------------------------------
 zmqol_nb_watch_death_once()
 {
+    //  🛑 v2.14.10 - NOTHING RUNS WITH THE ROW OFF, and the row is off by
+    //  default. Two threads and a 4 Hz poll per zombie is cheap but it is not
+    //  free, and with no_bleedout 0 they would only ever have measured a feature
+    //  that is not switched on. The shared failsafe calls this again on every
+    //  pass, so a zombie that was already alive when the row is turned on picks
+    //  its watcher up within one pass (30s, or 15s on Origins and Mob) - and the
+    //  call is idempotent, so calling it repeatedly costs one isdefined test.
+    if ( !getdvarintdefault( "no_bleedout", 0 ) )
+        return;
+
     if ( isdefined( self.zmqol_nb_watching ) )
         return;
 
@@ -19800,6 +19810,43 @@ zmqol_nb_death_notify()
     if ( is_true( self.marked_for_recycle ) || is_true( self.zmqol_nb_counted ) )
         return;
 
+    //  ========================================================================
+    //  🛑 v2.14.10 - A NAMED ATTACKER IS NOT A FREE ZOMBIE, and putting one
+    //  back for every attacker-less-looking kill was going to break traps.
+    //
+    //  The line above this one logs EVERY kill with no player attacker, and that
+    //  is right - it is the instrument. But the round is only owed a zombie when
+    //  NOTHING killed it. Every one of these is a real killer with a real entity
+    //  behind it, and each was read out of the stock dump rather than assumed:
+    //
+    //    trap kills            _zm_traps.gsc:625,642     attacker = the trap ent
+    //    TranZit lava          zm_transit_lava.gsc:285   attacker = the trap ent
+    //    Origins robot stomp   zm_tomb_giant_robot:933   attacker = the robot
+    //                          (and it is suppressed outright on this row now)
+    //    grief / module clears _zm_game_module.gsc:105   attacker = the zombie
+    //                          _zm_gametype.gsc:1777      itself, MOD_SUICIDE
+    //    burning zombies       _zm_spawner.gsc:1877      attacker = player, or
+    //                          `level` once that player is gone
+    //
+    //  A trap is the player's own doing - they bought it and lured the horde in.
+    //  Handing the round a replacement for every trap kill would make traps stop
+    //  clearing rounds at all on Mob of the Dead and TranZit, which is a bigger
+    //  bug than the one this row is fixing.
+    //
+    //  So only two shapes are owed back: the zombie was DELETED (the polled
+    //  watcher's branch, the reported case), or it was killed with NO attacker
+    //  entity at all - which is what a bare `dodamage( health + N, origin )` from
+    //  some script looks like, and what an unfound remover would look like.
+    //  📝 An attacker-less dodamage surfaces in the "death" notify as
+    //  `worldspawn`, not as undefined - that is what the 2026-09-06 log's round-4
+    //  burst was - so worldspawn counts as "nothing killed it" here. The one
+    //  stock place that does it in bulk, zombie_game_over_death, cannot reach
+    //  this code: _zm.gsc:4932 sets level.intermission on its first line and
+    //  zmqol_nb_requeue() returns on that.
+    //  ========================================================================
+    if ( !zmqol_nb_no_killer( e_attacker ) )
+        return;
+
     zmqol_nb_requeue( "killed by " + str_who );
 }
 
@@ -19830,6 +19877,20 @@ zmqol_nb_death_notify()
 //  cap it stops and says so, which is a bad round rather than a dead game.
 //  Never touched in a dog round, in intermission, or with the row off.
 // ----------------------------------------------------------------------------
+//  Is there an entity behind this kill? `undefined` and `worldspawn` both mean
+//  no - see the banner in zmqol_nb_death_notify(). Anything else is a trap, a
+//  robot, a vehicle or the zombie itself, and those are not owed back.
+zmqol_nb_no_killer( e_attacker )
+{
+    if ( !isdefined( e_attacker ) )
+        return true;
+
+    if ( isdefined( e_attacker.classname ) && e_attacker.classname == "worldspawn" )
+        return true;
+
+    return false;
+}
+
 zmqol_nb_requeue( str_why )
 {
     if ( !getdvarintdefault( "no_bleedout", 0 ) )
@@ -19918,6 +19979,7 @@ zmqol_round_spawn_failsafe()
         //  Re-read the row every pass, so turning it off mid-match hands the
         //  zombie back to stock behaviour and clears the flag with it.
         self zmqol_nb_sync_ignore_flag();
+        self zmqol_nb_watch_death_once();
 
         if ( !self.has_legs )
             wait 10.0;
