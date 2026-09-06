@@ -19585,24 +19585,112 @@ zmqol_hud_round_anchor( elem )
 //  Default 0 = stock, like every other PATCHES row. The dvar is read on every
 //  pass rather than captured, so the row takes effect mid-match.
 //
-//  📝 The body below is stock's, verbatim, with ONE `if` added. The two /# #/
-//  developer blocks stock has inside the kill branches are dropped because they
-//  are empty in the retail dump.
+//  📝 The body below is stock's, verbatim, plus the added branches marked in it.
+//  The two /# #/ developer blocks stock has inside the kill branches are dropped
+//  because they are empty in the retail dump.
+//
+//  🛑 v2.14.5 - AND THE PATCH DID NOTHING ON TWO MAPS, WHICH IS WHY THE
+//  IGNORE FLAG IS SET BELOW. The user, playing Origins on 2026-09-06 with the row
+//  ON: *"a zombie just bled out on its own from me getting far away from it,
+//  causing the round to end due to it being the last zombie"*. The live log had
+//  `no_bleedout "1"` and NOT ONE `SUPPRESSED` line, so a third route was killing
+//  it. It is `level._zombies_round_spawn_failsafe`, a per-map POINTER:
+//
+//      _zm.gsc:88-89        set to _zm::round_spawn_failsafe only
+//                           `if ( !isdefined( ... ) )` - so this mod's own
+//                           assignment in main() survives on four maps
+//      zm_tomb.gsc:164      OVERWRITES it with ::tomb_round_spawn_failsafe
+//      zm_prison.gsc:99     OVERWRITES it with ::alcatraz_round_spawn_failsafe
+//
+//  Both assignments run inside the map's own main(), AFTER this mod's main() and
+//  BEFORE `_zm::init()` reaches `_zm_gametype::custom_spawn_init_func`, which is
+//  what array_threads the pointer onto every spawner. There is no hook point in
+//  that window, so re-pointing cannot win the race.
+//
+//  🌟 So every zombie on Origins and Mob of the Dead runs TWO failsafes: this
+//  patched one (threaded directly by _zm::round_spawning:3068) and the map's own
+//  UNPATCHED copy from the spawn function. The map's kills at 15 seconds, half
+//  this one's 30, which is why it always won.
+//
+//  The fix is stock's own escape hatch - see zmqol_nb_sync_ignore_flag() above -
+//  and the ordering is not a hope: run_spawn_functions() opens with
+//  `waittillframeend` (_zm_utility.gsc:284), so the map's copy cannot start until
+//  the end of the frame in which this one already set the flag. Its very first
+//  check then returns.
+//
+//  🛑 The map copies are ALSO replaced, in scripts\zm\zm_tomb\zm_tomb.gsc and
+//  scripts\zm\zm_prison\zm_prison.gsc, for the zombies that never go through
+//  round_spawning() (Origins' capture-zone spawns, Grief's zmeat spawns). Whether
+//  a replaceFunc reaches a call made through a stored pointer is NOT established
+//  on this project - STOCK_REFERENCE 7a records the opposite - so those two
+//  replacements print once when they run. The flag above is the belt; they are
+//  the braces.
 // ============================================================================
+//  ----------------------------------------------------------------------------
+//  zmqol_nb_sync_ignore_flag  -  v2.14.5
+//
+//  🌟 `self.ignore_round_spawn_failsafe` IS STOCK'S OWN ESCAPE HATCH AND NOTHING
+//  IN STOCK EVER SETS IT. Four occurrences in the whole 2,093-file dump, all of
+//  them the same `isdefined(...) && ...` read at the top of a failsafe loop:
+//  _zm.gsc (shared), zm_tomb.gsc (Origins), zm_prison.gsc (Mob of the Dead) and
+//  the Diner copy. Treyarch left the writer to mods. So writing it cannot
+//  collide with anything, and it switches off EVERY variant at once - including
+//  the two this mod does not otherwise reach.
+//
+//  Ownership is tracked separately (`zmqol_nb_owns_ignore`) so this copy can
+//  tell its own flag from one another script set, and so turning the row off
+//  mid-match puts the zombie back exactly where stock had it.
+//  ----------------------------------------------------------------------------
+zmqol_nb_sync_ignore_flag()
+{
+    if ( getdvarintdefault( "no_bleedout", 0 ) )
+    {
+        self.ignore_round_spawn_failsafe = 1;
+        self.zmqol_nb_owns_ignore = 1;
+        return;
+    }
+
+    if ( isdefined( self.zmqol_nb_owns_ignore ) )
+    {
+        self.ignore_round_spawn_failsafe = 0;
+        self.zmqol_nb_owns_ignore = undefined;
+    }
+}
+
 zmqol_round_spawn_failsafe()
 {
     self endon( "death" );
     prevorigin = self.origin;
+
+    //  v2.14.5 - AND THE MAP'S OWN COPY OF THIS FUNCTION IS SWITCHED OFF HERE.
+    //  See the banner above for why: Origins and Mob of the Dead each thread a
+    //  SECOND, unpatched failsafe onto every zombie. Setting stock's own escape
+    //  hatch makes that copy return at the top of its next pass.
+    self zmqol_nb_sync_ignore_flag();
+
+    if ( !isdefined( level.zmqol_nb_said_shared ) )
+    {
+        level.zmqol_nb_said_shared = 1;
+        println( "[zm_qol] no_bleedout: shared failsafe hook LIVE on " + level.script + " - row=" + getdvarintdefault( "no_bleedout", 0 ) );
+    }
 
     while ( true )
     {
         if ( !level.zombie_vars["zombie_use_failsafe"] )
             return;
 
-        if ( isdefined( self.ignore_round_spawn_failsafe ) && self.ignore_round_spawn_failsafe )
+        //  🛑 THE ONE ADDED CLAUSE. Stock returns on the flag; this copy must not
+        //  return on a flag IT set itself (zmqol_nb_sync_ignore_flag), or the
+        //  patch would switch off the only failsafe still running. A flag set by
+        //  anything else is still honoured exactly as stock does.
+        if ( isdefined( self.ignore_round_spawn_failsafe ) && self.ignore_round_spawn_failsafe && !isdefined( self.zmqol_nb_owns_ignore ) )
             return;
 
         wait 30;
+
+        //  Re-read the row every pass, so turning it off mid-match hands the
+        //  zombie back to stock behaviour and clears the flag with it.
+        self zmqol_nb_sync_ignore_flag();
 
         if ( !self.has_legs )
             wait 10.0;
@@ -19624,6 +19712,7 @@ zmqol_round_spawn_failsafe()
                 level.zombie_total_subtract++;
             }
 
+            println( "[zm_qol] no_bleedout: BELOW-WORLD kill (shared, z=" + int( self.origin[2] ) + ") - kept on purpose, round " + level.round_number );
             self dodamage( self.health + 100, ( 0, 0, 0 ) );
             break;
         }

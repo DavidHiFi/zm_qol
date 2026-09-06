@@ -11,6 +11,12 @@ main()
     // loads on Origins (so the references resolve), and done in main() so they're
     // in place before the map threads the native code. Matches zm_highrise.gsc.
     replaceFunc( maps\mp\zm_tomb_dig::swap_weapon, ::custom_swap_weapon );            // weapon-dig fix
+
+    //  v2.14.5 - NO BLEEDOUT PATCH reaches Origins' OWN 15-second failsafe.
+    //  See the banner over zmqol_tomb_round_spawn_failsafe() at the end of this
+    //  file. The main switch-off is the ignore flag the shared copy sets; this
+    //  covers the zombies that never run the shared copy at all.
+    replaceFunc( maps\mp\zm_tomb::tomb_round_spawn_failsafe, ::zmqol_tomb_round_spawn_failsafe );
     replaceFunc( maps\mp\zm_tomb_ee_side::check_for_change, ::origins_change_patch ); // prone "loose change" -> 100
     replaceFunc( maps\mp\zm_tomb_utility::check_solo_status, ::qol_check_solo_status ); // 1 player = solo rules
 
@@ -1851,4 +1857,128 @@ zmqol_mechz_explode( str_tag, death_origin )
     earthquake( 0.5, 1.0, v_origin, 256 );
     playrumbleonposition( "grenade_rumble", v_origin );
     level notify( "mechz_killed", death_origin );
+}
+
+// ============================================================================
+//  ORIGINS' OWN round_spawn_failsafe — THE SECOND ONE, PATCHED      (v2.14.5)
+// ----------------------------------------------------------------------------
+//  User, 2026-09-06, playing Origins with NO BLEEDOUT PATCH set to ENABLED:
+//  *"a zombie just bled out on its own from me getting far away from it,
+//  causing the round to end due to it being the last zombie"*.
+//
+//  🌟 THE CAUSE, MEASURED. Origins does not use the shared failsafe alone.
+//  maps\mp\zm_tomb::main() line 164 does
+//      level._zombies_round_spawn_failsafe = ::tomb_round_spawn_failsafe;
+//  and _zm_gametype::custom_spawn_init_func array_threads that pointer onto
+//  every zombie spawner. So each zombie runs TWO failsafes: the shared one
+//  (patched in quality_of_life.gsc since v2.2.0) and this map-local copy, which
+//  is stock's 30-second loop rewritten to **15 seconds** with its own
+//  below-world floor of -3000. The 15-second one always wins, and it was never
+//  patched — the live log showed `no_bleedout "1"` and not one SUPPRESSED line.
+//
+//  🛑 WHY NOT JUST RE-POINT THE POINTER. Both the map's assignment (:164) and
+//  the read (`_zm::init` → `_zm_spawner::init` → `custom_spawn_init_func`) happen
+//  inside stock's own zm_tomb::main(), in that order, with nothing of this mod's
+//  running in between — mod main() is earlier, mod init() is later. The race
+//  cannot be won, so the mod does not try.
+//
+//  The real switch-off is quality_of_life.gsc::zmqol_nb_sync_ignore_flag(),
+//  which sets stock's own `self.ignore_round_spawn_failsafe` from the shared
+//  copy before this one starts (run_spawn_functions opens with
+//  `waittillframeend`). This replacement covers what that cannot: zombies that
+//  never go through _zm::round_spawning() and so never get the shared failsafe
+//  at all — Origins' capture-zone spawner is the live example.
+//
+//  📝 Body is maps\mp\zm_tomb.gsc:592 verbatim — 15s wait, -3000 floor, the
+//  brutus exclusion Treyarch left in a map with no Brutus — with the same one
+//  branch added that the shared copy has.
+// ============================================================================
+zmqol_tomb_round_spawn_failsafe()
+{
+    self endon( "death" );
+    prevorigin = self.origin;
+
+    if ( !isdefined( level.zmqol_nb_said_tomb ) )
+    {
+        level.zmqol_nb_said_tomb = 1;
+        println( "[zm_qol] no_bleedout: Origins 15s failsafe REPLACEMENT is live - row=" + getdvarintdefault( "no_bleedout", 0 ) );
+    }
+
+    while ( true )
+    {
+        if ( isdefined( self.ignore_round_spawn_failsafe ) && self.ignore_round_spawn_failsafe )
+            return;
+
+        wait 15;
+
+        if ( isdefined( self.is_inert ) && self.is_inert )
+            continue;
+
+        if ( isdefined( self.lastchunk_destroy_time ) )
+        {
+            if ( gettime() - self.lastchunk_destroy_time < 8000 )
+                continue;
+        }
+
+        //  🛑 KEPT, exactly as the shared copy keeps its own: a zombie under the
+        //  map cannot be shot, so suppressing this would end the round forever.
+        if ( self.origin[2] < -3000 )
+        {
+            if ( isdefined( level.put_timed_out_zombies_back_in_queue ) && level.put_timed_out_zombies_back_in_queue && !flag( "dog_round" ) && !( isdefined( self.isscreecher ) && self.isscreecher ) )
+            {
+                level.zombie_total++;
+                level.zombie_total_subtract++;
+            }
+
+            println( "[zm_qol] no_bleedout: BELOW-WORLD kill (Origins, z=" + int( self.origin[2] ) + ") - kept on purpose, round " + level.round_number );
+            self dodamage( self.health + 100, ( 0, 0, 0 ) );
+            break;
+        }
+
+        if ( distancesquared( self.origin, prevorigin ) < 576 )
+        {
+            //  🛑 THE PATCH — the same one the shared copy carries.
+            if ( getdvarintdefault( "no_bleedout", 0 ) )
+            {
+                if ( !isdefined( self.zmqol_nb_stuck ) )
+                    self.zmqol_nb_stuck = 0;
+
+                self.zmqol_nb_stuck++;
+
+                if ( !isdefined( self.zmqol_nb_said ) )
+                {
+                    self.zmqol_nb_said = 1;
+                    println( "[zm_qol] no_bleedout: SUPPRESSED Origins playspace-timeout kill, round " + level.round_number );
+                }
+
+                //  Five stuck passes here is ~75 seconds, not the shared copy's
+                //  ~2.5 minutes, because this loop is half as long. Same rule:
+                //  never damaged, only moved somewhere the player can reach it.
+                if ( self.zmqol_nb_stuck >= 5 && getdvarintdefault( "no_bleedout_relocate", 1 ) && self scripts\zm\quality_of_life::zmqol_no_bleedout_can_relocate() )
+                {
+                    if ( self scripts\zm\quality_of_life::zmqol_relocate_zombie( 0 ) )
+                        self.zmqol_nb_stuck = 0;
+                }
+
+                prevorigin = self.origin;
+                continue;
+            }
+
+            if ( isdefined( level.put_timed_out_zombies_back_in_queue ) && level.put_timed_out_zombies_back_in_queue && !flag( "dog_round" ) )
+            {
+                if ( !self.ignoreall && !( isdefined( self.nuked ) && self.nuked ) && !( isdefined( self.marked_for_death ) && self.marked_for_death ) && !( isdefined( self.isscreecher ) && self.isscreecher ) && ( isdefined( self.has_legs ) && self.has_legs ) && !( isdefined( self.is_brutus ) && self.is_brutus ) )
+                {
+                    level.zombie_total++;
+                    level.zombie_total_subtract++;
+                }
+            }
+
+            level.zombies_timeout_playspace++;
+            self dodamage( self.health + 100, ( 0, 0, 0 ) );
+            break;
+        }
+
+        prevorigin = self.origin;
+        self.zmqol_nb_stuck = 0;
+    }
 }

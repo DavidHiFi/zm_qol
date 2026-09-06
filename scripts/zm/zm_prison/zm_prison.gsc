@@ -12,6 +12,10 @@
 main()
 {
 	replaceFunc( maps\mp\zm_prison::delete_perk_machine_clip, ::delete_perk_machine_clip );
+
+	//  v2.14.5 - NO BLEEDOUT PATCH reaches Mob's OWN 15-second failsafe. See the
+	//  banner over zmqol_alcatraz_round_spawn_failsafe() at the end of this file.
+	replaceFunc( maps\mp\zm_prison::alcatraz_round_spawn_failsafe, ::zmqol_alcatraz_round_spawn_failsafe );
 	replaceFunc( maps\mp\zm_alcatraz_utility::check_solo_status, ::qol_check_solo_status ); // 1 player = solo rules
 
 	// --- custom survival start location: CELL BLOCK (stock Grief arena on zstandard) ---
@@ -722,4 +726,116 @@ zmqol_scrub_deathmachine_from_loadout()
     }
 
     println( "[zm_qol] death machine scrubbed from afterlife loadout (" + n_found + " entry, " + n_kept + " kept)" );
+}
+
+// ============================================================================
+//  MOB OF THE DEAD'S OWN round_spawn_failsafe — PATCHED             (v2.14.5)
+// ----------------------------------------------------------------------------
+//  Exact twin of the Origins case found on 2026-09-06 — read the long banner in
+//  scripts\zm\zm_tomb\zm_tomb.gsc for the mechanism and the evidence.
+//  maps\mp\zm_prison::main() line 99 does
+//      level._zombies_round_spawn_failsafe = ::alcatraz_round_spawn_failsafe;
+//  so every zombie on this map runs a SECOND failsafe that the NO BLEEDOUT PATCH
+//  never reached: 15 seconds instead of 30, a below-world floor of -15000, and
+//  Treyarch's Brutus book-keeping.
+//
+//  The main switch-off is quality_of_life.gsc::zmqol_nb_sync_ignore_flag(), which
+//  sets stock's own ignore flag from the shared copy first. This replacement is
+//  for the zombies that never pass through _zm::round_spawning() — Grief's
+//  zmeat.gsc spawns are the live example on this map.
+//
+//  📝 Body is maps\mp\zm_prison.gsc:1171 verbatim, minus its two empty /# #/
+//  developer blocks, with the same one branch added.
+// ============================================================================
+zmqol_alcatraz_round_spawn_failsafe()
+{
+    self endon( "death" );
+    prevorigin = self.origin;
+
+    if ( !isdefined( level.zmqol_nb_said_alcatraz ) )
+    {
+        level.zmqol_nb_said_alcatraz = 1;
+        println( "[zm_qol] no_bleedout: Mob 15s failsafe REPLACEMENT is live - row=" + getdvarintdefault( "no_bleedout", 0 ) );
+    }
+
+    while ( true )
+    {
+        if ( isdefined( self.ignore_round_spawn_failsafe ) && self.ignore_round_spawn_failsafe )
+            return;
+
+        wait 15;
+
+        if ( isdefined( self.is_inert ) && self.is_inert )
+            continue;
+
+        if ( isdefined( self.lastchunk_destroy_time ) )
+        {
+            if ( gettime() - self.lastchunk_destroy_time < 8000 )
+                continue;
+        }
+
+        //  🛑 KEPT: a zombie under the map can never be shot.
+        if ( self.origin[2] < -15000 )
+        {
+            if ( isdefined( level.put_timed_out_zombies_back_in_queue ) && level.put_timed_out_zombies_back_in_queue && !flag( "dog_round" ) && !( isdefined( self.isscreecher ) && self.isscreecher ) )
+            {
+                level.zombie_total++;
+                level.zombie_total_subtract++;
+            }
+
+            println( "[zm_qol] no_bleedout: BELOW-WORLD kill (Mob, z=" + int( self.origin[2] ) + ") - kept on purpose, round " + level.round_number );
+            self dodamage( self.health + 100, ( 0, 0, 0 ) );
+            break;
+        }
+
+        if ( distancesquared( self.origin, prevorigin ) < 576 )
+        {
+            //  🛑 THE PATCH — the same one the shared copy carries.
+            if ( getdvarintdefault( "no_bleedout", 0 ) )
+            {
+                if ( !isdefined( self.zmqol_nb_stuck ) )
+                    self.zmqol_nb_stuck = 0;
+
+                self.zmqol_nb_stuck++;
+
+                if ( !isdefined( self.zmqol_nb_said ) )
+                {
+                    self.zmqol_nb_said = 1;
+                    println( "[zm_qol] no_bleedout: SUPPRESSED Mob playspace-timeout kill, round " + level.round_number );
+                }
+
+                if ( self.zmqol_nb_stuck >= 5 && getdvarintdefault( "no_bleedout_relocate", 1 ) && self scripts\zm\quality_of_life::zmqol_no_bleedout_can_relocate() )
+                {
+                    if ( self scripts\zm\quality_of_life::zmqol_relocate_zombie( 0 ) )
+                        self.zmqol_nb_stuck = 0;
+                }
+
+                prevorigin = self.origin;
+                continue;
+            }
+
+            if ( isdefined( level.put_timed_out_zombies_back_in_queue ) && level.put_timed_out_zombies_back_in_queue && !flag( "dog_round" ) )
+            {
+                if ( !( isdefined( self.nuked ) && self.nuked ) && !( isdefined( self.marked_for_death ) && self.marked_for_death ) && !( isdefined( self.isscreecher ) && self.isscreecher ) && ( isdefined( self.has_legs ) && self.has_legs ) && !( isdefined( self.is_brutus ) && self.is_brutus ) )
+                {
+                    level.zombie_total++;
+                    level.zombie_total_subtract++;
+                }
+            }
+
+            level.zombies_timeout_playspace++;
+
+            if ( isdefined( self.is_brutus ) && self.is_brutus )
+            {
+                self.suppress_brutus_powerup_drop = 1;
+                self.brutus_round_spawn_failsafe = 1;
+            }
+
+            self dodamage( self.health + 100, ( 0, 0, 0 ) );
+            break;
+        }
+
+        prevorigin = self.origin;
+        self.zmqol_nb_stuck = 0;
+    }
 }
