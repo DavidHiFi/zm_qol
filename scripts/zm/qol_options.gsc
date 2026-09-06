@@ -2457,14 +2457,42 @@ qol_opt_tint( e_hud, v_color )
 //  this row are governed by the same hud_zone switch.
 //
 //  -- THE POSITION -----------------------------------------------------------
-//  Strat-Tester-BO2's own zone HUD (scripts\zm\strattester\hud.gsc:301-318) is
-//        x 8, horzalign "user_left"       y -95, vertalign "user_bottom"
-//        alignx "left", aligny "bottom",  +15 on Buried, +10 on Origins
-//  and those numbers ARE the measurement - the user named that mod and pointed
-//  at where it draws. NOTHING IS IMPORTED: six field assignments are a position,
-//  not an asset - the same call already made for the compass below. The old
-//  spot was setpoint( "LEFT", "BOTTOM_LEFT", -45, -24 ), 24 units above the
-//  bottom, which is down among the perk icons rather than above them.
+//  🛑 v2.14.8 - MOVED, AND THE OLD SPOT IS THE BUG. User, 2026-09-06:
+//  *"the zone notifier is colliding with other hud elements in origins,
+//  potentially other maps too, so move the zone notifier below where users name
+//  shows up, just underneath it."* The old position was Strat-Tester-BO2's
+//  (x 8 / y -95 on "user_left"/"user_bottom", +15 Buried, +10 Origins), and on
+//  Origins that lands ON the perk icon column - the user's screenshot shows
+//  "No Man's Land" drawn straight through a perk icon.
+//
+//  🌟 THE NEW SPOT IS THE PLAYER NAME'S OWN, ONE LINE LOWER, AND THE NUMBERS
+//  ARE MEASURED OFF THAT SCREENSHOT (2000x1125, so the 640x480 virtual screen
+//  scales by 1125/480 = 2.34 vertically):
+//        "Zombies: N"  ink rows 1004-1023  ->  virtual centre 432.5
+//        "DavidHiFi"   ink rows 1074-1091  ->  virtual centre 461.9
+//  quality_of_life.gsc draws those two with setpoint( "LEFT", "BOTTOM_LEFT",
+//  -45, -12 ) and ( ..., -45, 18 ) - offsets 30 apart, centres 29.4 apart - so
+//  ONE UNIT OF setpoint's y IS ONE VIRTUAL PIXEL, DOWNWARD, and this anchor's
+//  origin sits at virtual y 444 (the 7.5% safe-area line). Everything below
+//  follows from that: the screen bottom is offset ~35.8, the name's ink ends at
+//  offset ~21.4, and a "small" 1.2 line is ~8.1 virtual px tall.
+//
+//  y = 29 therefore puts this line's centre 11 below the name, its ink from
+//  offset ~25 to ~33, which is a ~3.7 px gap under the name and ~2.7 px of clear
+//  screen below it. x = -45 is the name's own x, so the two left edges line up.
+//
+//  📝 IT IS TIGHT BECAUSE THE STACK ALREADY ENDS AT THE SCREEN EDGE - there
+//  are only ~14.5 virtual px under the name. If it reads as too close to the
+//  bottom, y is the one number to change.
+//
+//  🛑 THE TWO PER-MAP NUDGES ARE GONE WITH IT. +15 on Buried and +10 on
+//  Origins existed to clear those maps' lower perk rows; anchored under the name
+//  they would only push this line off the bottom of the screen.
+//
+//  📝 IF THE HEALTH BAR ROW IS OFF, SO IS THE NAME - quality_of_life.gsc's
+//  qol_health_hud_create() builds both as one set - and this line then sits alone
+//  where the name would have been. That is a fixed, predictable spot rather than
+//  a floating one, so it is left as is.
 //
 //  🛑 THEIR FONT IS NOT COPIED. hud.gsc:306 asks for "hudsmall", which is not a
 //  T6 font - the engine rejects it with  "hudsmall" is not a valid value for
@@ -2521,25 +2549,14 @@ qol_opt_zone_hud( b_on )
     {
         self.qol_hud_zone = self createfontstring( "small", 1.2 );
 
-        //  🛑 ASSIGNED DIRECTLY, NOT THROUGH setpoint(). setpoint() can only
-        //  ever produce horzalign/vertalign "left"/"bottom" (_hud_util.gsc:
-        //  171-177), and the perk row is anchored to the SAFE AREA, so this has
-        //  to be as well. quality_of_life.gsc::qol_health_hud_create() sets the
-        //  same fields the same way on its own bars.
-        self.qol_hud_zone.alignx    = "left";
-        self.qol_hud_zone.aligny    = "bottom";
-        self.qol_hud_zone.horzalign = "user_left";
-        self.qol_hud_zone.vertalign = "user_bottom";
-        self.qol_hud_zone.x = 8;
-        self.qol_hud_zone.y = -95;
-
-        //  Strat-Tester's own two per-map nudges, carried over because they are
-        //  the only measurement anyone here has of those two maps' perk rows
-        //  sitting lower than the other four.
-        if ( level.script == "zm_buried" )
-            self.qol_hud_zone.y = self.qol_hud_zone.y + 15;
-        else if ( level.script == "zm_tomb" )
-            self.qol_hud_zone.y = self.qol_hud_zone.y + 10;
+        //  🛑 setpoint(), AND THE SAME CALL THE PLAYER NAME MAKES. The old
+        //  position hand-assigned horzalign/vertalign "user_left"/"user_bottom"
+        //  to sit above the perk row; this line is anchored to the NAME now, and
+        //  quality_of_life.gsc::qol_health_hud_create() places that with
+        //  setpoint( "LEFT", "BOTTOM_LEFT", -45, 18 ). Matching the call is what
+        //  makes "one line lower" mean exactly 11, in the same frame, on every
+        //  map. See the measurement in the banner above.
+        self.qol_hud_zone setpoint( "LEFT", "BOTTOM_LEFT", -45, 29 );
 
         //  Never faded, never hidden. That is the whole row.
         self.qol_hud_zone.alpha = 1;
