@@ -130,6 +130,24 @@ include_weapons()
     include_weapon( "staff_water_zm_cheap", 0 );
     include_weapon( "staff_water_upgraded_zm", 0 );
     include_weapon( "staff_revive_zm", 0 );
+    // ========================================================================
+    //  🛑 v2.14.2 - EXACT TWIN OF zm_tomb.gsc::added_weapons()'s OWN SKIP.
+    //  Read the long banner above that function for why the Crazy Place cannot
+    //  afford these seven pairs (its four perk machines cost ten precacheitem
+    //  calls stock's own _zm_perks::init() skips on every other Origins
+    //  survival location, and v2.14.0 crashed at load because of it).
+    //
+    //  🛑 THIS HALF IS NOT BOOKKEEPING. include_weapon() here ends in
+    //  addzombieboxweapon( weapon, getweaponmodel( weapon ), ... ) - a model
+    //  lookup on a weapon the server never precached is the as50_zm client
+    //  crash documented in zm_expanded.csc::zmqol_mp_weapons_init(). If the two
+    //  lists ever disagree the map dies on the CLIENT instead of the server.
+    //
+    //  Same dvar test as the server's zmqol_loc_spawns_perk_machines(), and the
+    //  same one zmqol_add_crazy_place_wallbuys() already uses client-side.
+    //  📝 knife_ballistic_* is not in this list and never was - it is not a box
+    //  weapon - so the server keeping it needs no twin here.
+    // ========================================================================
     // Added weapons
     include_weapon( "uzi_zm" );
     include_weapon( "uzi_upgraded_zm", 0 );
@@ -152,26 +170,40 @@ include_weapons()
     include_weapon( "xm8_upgraded_zm", 0 );
     include_weapon( "rpd_zm" );
     include_weapon( "rpd_upgraded_zm", 0 );
+    //  🛑 THE GATE - twin of zm_tomb.gsc::added_weapons()'s. Everything above is
+    //  precached by the root script on every map regardless, so only the pairs
+    //  below buy the Crazy Place a slot by being held back.
+    if ( getdvar( "ui_zm_mapstartlocation" ) != "crazy_place" )
+    {
     include_weapon( "saritchqol_zm" );
     include_weapon( "saritchqol_upgraded_zm", 0 );
-    include_weapon( "m16qol_zm" );
-    include_weapon( "m16qol_upgraded_zm", 0 );
     include_weapon( "barretm82qol_zm" );
     include_weapon( "barretm82qol_upgraded_zm", 0);
     include_weapon( "mp5kqol_zm" );
     include_weapon( "mp5kqol_upgraded_zm", 0);
     include_weapon( "tar21qol_zm" );
     include_weapon( "tar21qol_upgraded_zm", 0);
-    include_weapon( "rottweil72qol_zm" );
-    include_weapon( "rottweil72qol_upgraded_zm", 0 );
     include_weapon( "saiga12qol_zm" );
     include_weapon( "saiga12qol_upgraded_zm", 0);
-    include_weapon( "m1911_zm" );
-    include_weapon( "m1911_upgraded_zm", 0);
     include_weapon( "judgeqol_zm" );
     include_weapon( "judgeqol_upgraded_zm", 0);
     include_weapon( "usrpg_zm" );
     include_weapon( "usrpg_upgraded_zm", 0);
+    }
+    else
+        println( "[zm_qol] CLIENT crazy place: added weapons SKIPPED - 7 pair(s), matching the server" );
+
+    //  🛑 OUTSIDE THE SKIP ON PURPOSE - twin of the same two pairs in
+    //  zm_tomb.gsc::added_weapons(). The root script precaches and registers
+    //  Origins' private M16 and Olympia on every location, so the client has to
+    //  include them on every location too or the box cannot draw them. Read the
+    //  banner beside them on the server for the full reason.
+    include_weapon( "m16qol_zm" );
+    include_weapon( "m16qol_upgraded_zm", 0 );
+    include_weapon( "rottweil72qol_zm" );
+    include_weapon( "rottweil72qol_upgraded_zm", 0 );
+    include_weapon( "m1911_zm" );
+    include_weapon( "m1911_upgraded_zm", 0);
 
     // ========================================================================
     //  v2.9.1 - THE THREE ORIGINS COPIES THAT ARE REGISTERED FROM A ROOT

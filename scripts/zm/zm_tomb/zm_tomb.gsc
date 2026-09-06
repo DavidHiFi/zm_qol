@@ -1451,6 +1451,78 @@ zmqol_open_stock_barriers()
     println( "[zm_qol] BARRIERS opened " + n_opened + " stock zbarriers" );
 }
 
+// ============================================================================
+//  🛑 v2.14.2 - THE CRAZY PLACE RUNS ORIGINS' OWN GUN LIST, AND THAT IS WHAT
+//  STOPS IT CRASHING AT LOAD.
+//
+//  v2.14.0 boot, 2026-09-06 1:51 PM, crash dump
+//  plutonium-r5346-t6zm-2026-09-06_01-51-43.txt:
+//      last gsc error message 'unknown weapon 'mp5kqol_upgraded_zm''
+//      gsc callstack: maps/mp/zombies/_zm_weapons::include_zombie_weapon
+//        maps/mp/zombies/_zm_utility::include_weapon
+//        scripts/zm/zm_tomb/zm_tomb::added_weapons
+//        scripts/zm/zm_tomb/zm_tomb::init
+//  The Crazy Place's own code was NOT at fault - every stage of it logged
+//  clean, right through `loc_common::init reached - location=crazy_place`.
+//  It died afterwards, here.
+//
+//  🌟 THE MECHANISM: the weapon precache table ran out, and the Crazy Place is
+//  what tips it over. The raw def loaded fine (`Loaded weapon:
+//  mp5kqol_upgraded_zm` is in the log and there is NO `Failed to load weapon`
+//  line, so this is not ERROR_CATALOGUE §36's 20,480-byte rule) - it is
+//  precacheitem() that came back unknown, and two calls later the empty slot
+//  was dereferenced.
+//
+//  WHY THIS LOCATION AND NOT CLASSIC ORIGINS. It is the first Origins survival
+//  location with perk machines. _zm_perks::init() returns at _zm_perks.gsc:52
+//  (`if ( vending_triggers.size < 1 ) return;`) BEFORE
+//  default_vending_precaching(), so the "tomb" survival location skips that
+//  batch entirely. With four machines + Pack-a-Punch it runs, and it is TEN
+//  extra precacheitem() calls: zombie_knuckle_crack plus nine
+//  zombie_perk_bottle_*. Each of those blocks is gated on a level-wide
+//  level.zombiemode_using_* flag that Origins sets for every perk it supports,
+//  regardless of which machines this particular location has, so there is no
+//  way to trim them without breaking the perks.
+//
+//  So the room has to pay for itself out of the weapon list - and the gate is
+//  drawn where it actually buys something. MEASURED, not assumed: of the twenty
+//  pairs this function adds, THIRTEEN are precached on every map regardless by
+//  quality_of_life.gsc's own init() (72 unconditional precacheitem calls) or by
+//  zmqol_wallbuy_box_add()'s internal precache. Holding those back would delete
+//  a gun from the box and free NOTHING. Only SEVEN pairs are precached here and
+//  nowhere else - saritchqol, barretm82qol, mp5kqol, tar21qol, saiga12qol,
+//  judgeqol, usrpg - so those are the seven the gate skips, freeing FOURTEEN
+//  slots against a ten-slot problem.
+//
+//  🌟 WHY FOURTEEN IS PROVABLY ENOUGH, without knowing the ceiling: classic
+//  Origins boots today at demand D. The Crazy Place is D + 10 and crashes.
+//  D + 10 - 14 = D - 4, four below a configuration that demonstrably loads.
+//
+//  Classic Origins is untouched: the gate only fires on this one location, so
+//  the map every other mode runs is byte-for-byte what it was.
+//
+//  ⚠️ WHAT THE PLAYER LOSES, said plainly: inside the Crazy Place the mystery
+//  box is missing seven of the mod's added guns (the Saritch, the Barrett M82,
+//  the MP5K, the MTAR, the Saiga-12, the Judge and the RPG). The other thirteen
+//  are still there. The user chose this lane over the alternatives, 2026-09-06,
+//  after being told the trade.
+//
+//  🛑 IF THE ROOT PRECACHE LIST EVER CHANGES, RE-MEASURE THIS SEVEN. A gun that
+//  stops being precached by the root but stays out of the gate would silently
+//  make the saving smaller, and the crash would come back.
+//
+//  🛑 THE CLIENT MUST SKIP THE SAME TWENTY, and zm_tomb.csc::include_weapons()
+//  does, under the same test. This is not optional bookkeeping: the client's
+//  include_weapon (clientscripts\mp\zombies\_zm_weapons.csc:138) ends in
+//  addzombieboxweapon( weapon, getweaponmodel( weapon ), ... ), a model lookup
+//  on a weapon nothing precached - which is exactly the as50_zm client crash
+//  v2.9.4 documents in zm_expanded.csc. Change one list, change both.
+//
+//  📝 knife_ballistic_* STAYS on this location. It costs two slots, it is not a
+//  box weapon (no add_zombie_weapon, and the client list never had it), and it
+//  exists solely so zmqol_whoswho_knife_name()'s guard passes - dropping it
+//  would quietly take the ballistic knife off Who's Who here.
+// ============================================================================
 added_weapons()
 {
     if (level.script == "zm_tomb")
@@ -1495,13 +1567,15 @@ added_weapons()
         include_weapon( "rpd_upgraded_zm", 0 );
         add_zombie_weapon( "rpd_zm", "rpd_upgraded_zm", &"ZOMBIE_WEAPON_RPD", 50, "wpck_rpd", "", undefined, 1 );
 
+      //  🛑 THE GATE. Everything ABOVE this line is precached by the root script
+      //  on every map anyway (quality_of_life.gsc::init()'s 72 precacheitem
+      //  calls), so holding those back would cost the box a gun and free no
+      //  slot. Only the pairs below are precached HERE and nowhere else.
+      if ( !zmqol_loc_spawns_perk_machines() )
+      {
         include_weapon( "saritchqol_zm" );
         include_weapon( "saritchqol_upgraded_zm", 0 );
         add_zombie_weapon( "saritchqol_zm", "saritchqol_upgraded_zm", &"ZOMBIE_WEAPON_SARITCH", 50, "wpck_sidr", "", undefined, 1 );
-
-        include_weapon( "m16qol_zm" );
-        include_weapon( "m16qol_upgraded_zm", 0 );
-        add_zombie_weapon( "m16qol_zm", "m16qol_upgraded_zm", &"ZOMBIE_WEAPON_M16", 1200, "burstrifle", "", undefined );
 
         include_weapon( "barretm82qol_zm" );
         include_weapon( "barretm82qol_upgraded_zm", 0);
@@ -1515,17 +1589,9 @@ added_weapons()
         include_weapon( "tar21qol_upgraded_zm", 0);
         add_zombie_weapon( "tar21qol_zm", "tar21qol_upgraded_zm", &"ZOMBIE_WEAPON_TAR21", 50, "wpck_x95l", "", undefined, 1 );
 
-        include_weapon( "rottweil72qol_zm" );
-        include_weapon( "rottweil72qol_upgraded_zm", 0 );
-        add_zombie_weapon( "rottweil72qol_zm", "rottweil72qol_upgraded_zm", &"ZOMBIE_WEAPON_ROTTWEIL72", 500, "shotgun", "", undefined );
-
         include_weapon( "saiga12qol_zm" );
         include_weapon( "saiga12qol_upgraded_zm", 0);
         add_zombie_weapon( "saiga12qol_zm", "saiga12qol_upgraded_zm", &"ZOMBIE_WEAPON_SAIGA12", 50, "wpck_saiga12", "", undefined, 1 );
-
-        include_weapon( "m1911_zm" );
-        include_weapon( "m1911_upgraded_zm", 0);
-        add_zombie_weapon( "m1911_zm", "m1911_upgraded_zm", &"ZOMBIE_WEAPON_M1911", 50, "", "", undefined );
 
         include_weapon( "judgeqol_zm" );
         include_weapon( "judgeqol_upgraded_zm", 0);
@@ -1534,6 +1600,40 @@ added_weapons()
         include_weapon( "usrpg_zm" );
         include_weapon( "usrpg_upgraded_zm", 0);
         add_zombie_weapon( "usrpg_zm", "usrpg_upgraded_zm", &"ZOMBIE_WEAPON_USRPG", 50, "wpck_rpg", "", undefined, 1 );
+      }
+      else
+        println( "[zm_qol] crazy place: added_weapons SKIPPED - 7 pair(s) held back, 14 precache slot(s) freed for the perk machines" );
+
+        // ====================================================================
+        //  🛑 THESE TWO PAIRS STAY ON EVERY LOCATION, THE CRAZY PLACE INCLUDED,
+        //  and skipping them would cost nothing while breaking the box.
+        //
+        //  Origins' private M16 and Olympia are ALREADY precached on this map by
+        //  the root script - quality_of_life.gsc::zmqol_wallbuy_box_add() calls
+        //  precacheitem() itself and zmqol_tomb_weapon() swaps m16_zm ->
+        //  m16qol_zm / rottweil72_zm -> rottweil72qol_zm there. So holding them
+        //  back here frees ZERO slots.
+        //
+        //  What it WOULD do is desync the box: the server would still have them
+        //  registered (from that root call) while zm_tomb.csc's matching skip
+        //  removed the client's only include of the qol names - zm_expanded.csc's
+        //  client twin includes the STOCK m16_zm / rottweil72_zm, not these. A
+        //  weapon the server can hand out that the client never included is a box
+        //  result the client cannot render.
+        //  📝 m1911 is the third name in that root list and does NOT need this,
+        //  because zm_expanded.csc's twin includes m1911_zm by its own name.
+        // ====================================================================
+        include_weapon( "m16qol_zm" );
+        include_weapon( "m16qol_upgraded_zm", 0 );
+        add_zombie_weapon( "m16qol_zm", "m16qol_upgraded_zm", &"ZOMBIE_WEAPON_M16", 1200, "burstrifle", "", undefined );
+
+        include_weapon( "rottweil72qol_zm" );
+        include_weapon( "rottweil72qol_upgraded_zm", 0 );
+        add_zombie_weapon( "rottweil72qol_zm", "rottweil72qol_upgraded_zm", &"ZOMBIE_WEAPON_ROTTWEIL72", 500, "shotgun", "", undefined );
+
+        include_weapon( "m1911_zm" );
+        include_weapon( "m1911_upgraded_zm", 0);
+        add_zombie_weapon( "m1911_zm", "m1911_upgraded_zm", &"ZOMBIE_WEAPON_M1911", 50, "", "", undefined );
 
         // ====================================================================
         //  v2.9.13 - THE BALLISTIC KNIFE, SO WHO'S WHO CAN REVIVE YOU HERE.
