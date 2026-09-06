@@ -19670,17 +19670,94 @@ zmqol_nb_watch_death_once()
         return;
 
     self.zmqol_nb_watching = 1;
+
+    //  Two threads, and they do not overlap. The notify one has the attacker the
+    //  engine hands to "death" and owns every KILL; the polled one owns the case
+    //  a notify cannot describe - the entity being DELETED, after which every
+    //  field on it reads undefined.
+    self thread zmqol_nb_death_notify();
     self thread zmqol_nb_death_watch();
 }
 
 zmqol_nb_death_watch()
 {
+    //  🛑 v2.14.7 - POLLED, NOT `waittill( "death" )`, AND THE STATE IS KEPT IN
+    //  THREAD LOCALS. v2.14.6's version answered the Origins report with
+    //      DEATH WITH NO PLAYER ATTACKER - by=undefined mod=? weapon=?
+    //  nine times in one round, and that shape is itself the finding: every
+    //  field came back undefined because THE ENTITY WAS ALREADY GONE. A deleted
+    //  entity keeps nothing, so anything read after the fact reads undefined and
+    //  a silent deletion cannot be told apart from a damage-less kill.
+    //
+    //  So the loop caches what matters one second at a time, and the two exits
+    //  are different findings:
+    //      !isdefined( self )  ->  DELETED. Nothing killed it; it was removed.
+    //      !isalive( self )    ->  killed, and self.attacker names by what.
+    str_zone  = "?";
+    n_x = 0;
+    n_y = 0;
+    n_z = 0;
+    n_hp = 0;
+    b_dmg = 0;
+    b_emerged = 0;
+    b_recycle = 0;
+
+    for ( ;; )
+    {
+        if ( !isdefined( self ) )
+        {
+            if ( getdvarintdefault( "no_bleedout", 0 ) )
+            {
+                println( "[zm_qol] no_bleedout: ZOMBIE VANISHED - deleted, never killed - zone=" + str_zone + " at (" + n_x + "," + n_y + "," + n_z + ") hp=" + n_hp + " player_damaged=" + b_dmg + " emerged=" + b_emerged + " round=" + level.round_number + " left=" + get_current_zombie_count() );
+
+                if ( !b_recycle )
+                    zmqol_nb_requeue( "deleted" );
+            }
+
+            return;
+        }
+
+        //  Killed - zmqol_nb_death_notify() owns that, with the real attacker.
+        if ( !isalive( self ) )
+            return;
+
+        if ( isdefined( self.zone_name ) )
+            str_zone = self.zone_name;
+
+        n_x = int( self.origin[0] );
+        n_y = int( self.origin[1] );
+        n_z = int( self.origin[2] );
+        n_hp = self.health;
+        b_dmg = is_true( self.has_been_damaged_by_player );
+        b_emerged = is_true( self.completed_emerging_into_playable_area );
+        b_recycle = is_true( self.marked_for_recycle );
+
+        //  0.25s, and the number is load-bearing: _zm.gsc:3724's round-end test
+        //  polls once a SECOND, so a quarter-second detection window means the
+        //  replacement below is in the queue before the round can decide it is
+        //  over. A one-second poll would lose that race about as often as it won.
+        wait 0.25;
+    }
+}
+
+//  The KILL path, unchanged from v2.14.6 except for the requeue at the end: the
+//  attacker comes from the "death" notify itself, which the 2026-09-06 log
+//  proved carries it (a whole round of player kills stayed silent, and only nine
+//  attacker-less deaths printed).
+zmqol_nb_death_notify()
+{
     self waittill( "death", e_attacker );
+
+    //  Deleted rather than killed - the polled watcher owns that case and is the
+    //  only one of the two with the state to describe it.
+    if ( !isdefined( self ) )
+        return;
 
     if ( !getdvarintdefault( "no_bleedout", 0 ) )
         return;
 
-    //  A player kill is the whole point of the feature - say nothing.
+    //  A player kill is the whole point of the feature - say nothing, count
+    //  nothing.
     if ( isdefined( e_attacker ) && isplayer( e_attacker ) )
         return;
 
@@ -19710,12 +19787,84 @@ zmqol_nb_death_watch()
     if ( isdefined( self.damageweapon ) )
         str_weap = self.damageweapon;
 
-    n_marked = 0;
+    str_zone = "?";
 
-    if ( isdefined( self.marked_for_death ) && self.marked_for_death )
-        n_marked = 1;
+    if ( isdefined( self.zone_name ) )
+        str_zone = self.zone_name;
 
-    println( "[zm_qol] no_bleedout: DEATH WITH NO PLAYER ATTACKER - by=" + str_who + " mod=" + str_mod + " weapon=" + str_weap + " robot_marked=" + n_marked + " round=" + level.round_number + " left=" + get_current_zombie_count() );
+    println( "[zm_qol] no_bleedout: DEATH WITH NO PLAYER ATTACKER - by=" + str_who + " mod=" + str_mod + " weapon=" + str_weap + " robot_marked=" + is_true( self.marked_for_death ) + " zone=" + str_zone + " player_damaged=" + is_true( self.has_been_damaged_by_player ) + " round=" + level.round_number + " left=" + get_current_zombie_count() );
+
+    //  Stock already puts a recycled zombie back itself (_zm_spawner.gsc:2216),
+    //  and this mod's own below-world branches do the same where the level flag
+    //  asks for it - neither is counted twice.
+    if ( is_true( self.marked_for_recycle ) || is_true( self.zmqol_nb_counted ) )
+        return;
+
+    zmqol_nb_requeue( "killed by " + str_who );
+}
+
+// ----------------------------------------------------------------------------
+//  zmqol_nb_requeue  -  THE ROUND DOES NOT GET SHORTER FOR FREE     (v2.14.7)
+//
+//  User's own wording for this row: *"no respawns from nothing, they have to be
+//  actually killed by the player"*. Two Origins reports in one evening were a
+//  zombie leaving play with nothing having killed it, and the second one ended
+//  the round. The cause of the vanishing is still open - see the watcher above,
+//  which now names it - but the CONSEQUENCE does not have to wait for that: a
+//  zombie that leaves play without a player killing it is owed back to the
+//  round.
+//
+//  🌟 THIS IS STOCK'S OWN MECHANISM, NOT AN INVENTION. `level.zombie_total++`
+//  with `level.zombie_total_subtract++` is exactly what _zm.gsc:3666-3667 and
+//  _zm_spawner.gsc:2216-2219 do when a zombie times out or is recycled, and it
+//  is what `put_timed_out_zombies_back_in_queue` exists for.
+//
+//  🌟 AND IT CANNOT HANG THE ROUND. _zm.gsc:2962's spawner is `while ( true )`
+//  with `while ( count >= ai_limit || zombie_total <= 0 ) wait 0.1;` inside it -
+//  it never exits on an empty queue, it idles - so a total bumped at any point
+//  in the round produces a real spawn. Read out of the dump before writing this,
+//  because the failure mode if it were false is a round that never ends.
+//
+//  🛑 CAPPED AT 24 PER ROUND. If whatever is removing zombies ever removes them
+//  as fast as they spawn, an uncapped put-back would be an endless round. At the
+//  cap it stops and says so, which is a bad round rather than a dead game.
+//  Never touched in a dog round, in intermission, or with the row off.
+// ----------------------------------------------------------------------------
+zmqol_nb_requeue( str_why )
+{
+    if ( !getdvarintdefault( "no_bleedout", 0 ) )
+        return;
+
+    if ( !getdvarintdefault( "no_bleedout_requeue", 1 ) )
+        return;
+
+    if ( !isdefined( level.zombie_total ) || is_true( level.intermission ) )
+        return;
+
+    if ( level flag_exists( "dog_round" ) && flag( "dog_round" ) )
+        return;
+
+    if ( !isdefined( level.zmqol_nb_requeue_round ) || level.zmqol_nb_requeue_round != level.round_number )
+    {
+        level.zmqol_nb_requeue_round = level.round_number;
+        level.zmqol_nb_requeued = 0;
+    }
+
+    if ( level.zmqol_nb_requeued >= 24 )
+    {
+        if ( level.zmqol_nb_requeued == 24 )
+        {
+            level.zmqol_nb_requeued++;
+            println( "[zm_qol] no_bleedout: 24 put back this round already - CAP HIT, letting the rest go. Something is removing zombies in bulk." );
+        }
+
+        return;
+    }
+
+    level.zmqol_nb_requeued++;
+    level.zombie_total++;
+    level.zombie_total_subtract++;
+    println( "[zm_qol] no_bleedout: one owed back to the round (" + str_why + ") - " + level.zmqol_nb_requeued + " this round, zombie_total now " + level.zombie_total );
 }
 
 zmqol_nb_sync_ignore_flag()
@@ -19788,6 +19937,9 @@ zmqol_round_spawn_failsafe()
             {
                 level.zombie_total++;
                 level.zombie_total_subtract++;
+                //  v2.14.7 - stock's put-back already happened here, so
+                //  zmqol_nb_requeue() must not count this one a second time.
+                self.zmqol_nb_counted = 1;
             }
 
             println( "[zm_qol] no_bleedout: BELOW-WORLD kill (shared, z=" + int( self.origin[2] ) + ") - kept on purpose, round " + level.round_number );

@@ -785,6 +785,9 @@ zmqol_alcatraz_round_spawn_failsafe()
             {
                 level.zombie_total++;
                 level.zombie_total_subtract++;
+                //  v2.14.7 - stock's put-back already happened here, so
+                //  zmqol_nb_requeue() must not count this one a second time.
+                self.zmqol_nb_counted = 1;
             }
 
             println( "[zm_qol] no_bleedout: BELOW-WORLD kill (Mob, z=" + int( self.origin[2] ) + ") - kept on purpose, round " + level.round_number );
