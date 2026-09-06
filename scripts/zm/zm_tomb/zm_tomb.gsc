@@ -1655,6 +1655,34 @@ qol_check_solo_status()
         level.is_forever_solo_game = 0;
 
     println( "[zm_qol] solo status: expected=" + n_expected + " connected=" + getnumconnectedplayers() + " is_forever_solo_game=" + level.is_forever_solo_game );
+
+    //  ========================================================================
+    //  v2.13.0 - THE ONE CO-OP QUESTION THIS MAP CANNOT ANSWER OFFLINE, SO IT
+    //  ASKS THE LOG INSTEAD OF GUESSING.
+    //
+    //  The `<= 1` above differs from stock's `== 1` only when the engine
+    //  reports ZERO expected players. The v1.62.0 note thirty lines up says
+    //  Origins has never been seen to do that - it reported expected=1 - but
+    //  that reading is from a SOLO boot, and nobody has ever read this line
+    //  out of a co-op one. If a Mods-menu co-op game also resolves to 0, this
+    //  hands a two-player match the solo rules, and on THIS map that means
+    //  exactly the five stock behaviours the v1.62.0 note lists:
+    //    - zone_capture_powerup gives the solo reward chest (double points
+    //      rather than zombie blood) after the first generator
+    //    - adjustments_for_solo applies the solo door/debris prices and the
+    //      750-point Beretta/870
+    //    - get_recapture_zombies_needed returns 4 instead of 6
+    //    - get_capture_rate uses rate_capture_solo instead of the co-op rate
+    //    - _zm_ai_mechz runs its solo Panzer behaviour
+    //  Wrong, but playable - none of it is a script error.
+    //
+    //  IT IS DELIBERATELY NOT PRE-EMPTIVELY "FIXED". This value is read once
+    //  and never re-checked, which is what "forever solo" means in stock too,
+    //  and flipping it on a guess would break the solo case that is currently
+    //  correct on this map. One co-op boot and this log line settles it.
+    //  ========================================================================
+    if ( n_expected <= 1 )
+        println( "[zm_qol] *** solo rules are ON. If this is a CO-OP game, this line is the bug - report it with the two counts above." );
 }
 
 //  Stock maps\mp\zombies\_zm_ai_mechz::mechz_explode, unchanged except for the

@@ -1015,10 +1015,26 @@ bo4maxammo_onplayerspawned()
     for(;;)
     {
         self waittill("spawned_player");
+        //  ====================================================================
+        //  v2.13.0 - THE SAME CO-OP RACE AS dm_onplayerspawned(), SAME FIX:
+        //  claim the flag BEFORE the wait, not after it.
+        //
+        //  This is a per-player thread installing a level-wide replaceFunc.
+        //  Every player passed the isDefined test inside the same frame and
+        //  all of them ran the replaceFunc five seconds later.
+        //
+        //  STATED HONESTLY: this one was NOT a crash. Every caller passes the
+        //  identical (orig, new) pair, so repeating it re-writes the same
+        //  redirect and the second write is a no-op - unlike the Death Machine
+        //  hook, which saved the live pointer and so could save itself. It is
+        //  fixed anyway because it is the same defect class and one line, and
+        //  leaving a known race in place to be re-derived later is how the
+        //  Death Machine one survived this long.
+        //  ====================================================================
         if(!isDefined(level.maC1))
         {
-            wait 5;
             level.maC1 = "DONE";
+            wait 5;
     		replaceFunc(maps\mp\zombies\_zm_powerups::full_ammo_powerup,::new_full_ammo_powerup);
         }
     }
@@ -2968,15 +2984,53 @@ dm_onplayerspawned()
     {
         self waittill( "spawned_player" );
         deathmachine_clear_powerup_state( self );
+        //  ====================================================================
+        //  🛑 v2.13.0 - THE CO-OP CRASH. THE FLAG IS CLAIMED *BEFORE* THE WAIT,
+        //  AND THAT ONE LINE IS THE WHOLE FIX.
+        //
+        //  This is a PER-PLAYER thread (dm_onplayerconnect threads one per
+        //  player), and it installed a LEVEL-WIDE hook. The guard tested
+        //  level.deathmachine_powerup_init_done and only set it AFTER `wait 2`,
+        //  so in co-op every player's thread passed the test inside the same
+        //  window - they all spawn together at match start - and every one of
+        //  them then ran the install block.
+        //
+        //  🌟 WHY THAT CRASHES, EXACTLY. The block saves the current handler and
+        //  then overwrites it:
+        //        level.original_deathmachine_powerup_grab = level._zombiemode_powerup_grab;
+        //        level._zombiemode_powerup_grab           = ::custom_powerup_grab;
+        //  The FIRST thread saves the real handler (stock's, or the map's own -
+        //  Origins' ::tomb_powerup_grab). The SECOND thread, resuming from its
+        //  own wait a frame later, saves what the first one just installed:
+        //  ::custom_powerup_grab ITSELF. So original == custom.
+        //
+        //  custom_powerup_grab()'s last line chains the saved handler:
+        //        level thread [[ level.original_deathmachine_powerup_grab ]]( ... );
+        //  which is now itself. Picking up ANY power-up that is not the Death
+        //  Machine or Zombie Blood - Max Ammo, Nuke, Insta-Kill, Carpenter,
+        //  Double Points, Fire Sale - therefore spawns a thread that spawns a
+        //  thread that spawns a thread, with no wait anywhere in the chain, and
+        //  the server dies on the spot. Two players is enough; solo can never
+        //  reach it because there is only ever one thread.
+        //
+        //  🌟 THE FIX IS ATOMIC BECAUSE GSC IS COOPERATIVE. There is no
+        //  preemption between the isDefined test and the assignment below - a
+        //  thread only yields at a wait - so exactly one player's thread can
+        //  ever win the claim, and the losers skip the block entirely. The
+        //  `wait 2` still happens inside the winner, so the map's own handler is
+        //  still in place before it is chained; only the bookkeeping moved.
+        //
+        //  📝 Same defect, same fix, in bo4maxammo_onplayerspawned() above.
+        //  ====================================================================
         if ( !isDefined( level.deathmachine_powerup_init_done ) )
         {
+            level.deathmachine_powerup_init_done = 1;
             wait 2;
             if ( isDefined( level._zombiemode_powerup_grab ) )
             {
                 level.original_deathmachine_powerup_grab = level._zombiemode_powerup_grab;
             }
             level._zombiemode_powerup_grab = ::custom_powerup_grab;
-            level.deathmachine_powerup_init_done = 1;
         }
         self notify( "restart_deathmachine_test" );
         //self thread powerup_test();
@@ -5666,6 +5720,69 @@ zmqol_dev_command_listener()
                 player iprintln( "^2[zm_qol] AFK ON ^7- ignored and invulnerable" );
             }
         }
+        else if ( cmd == "character" || cmd == "char" )
+        {
+            //  ================================================================
+            //  🛑 v2.13.0 - THE PER-PLAYER CHARACTER PICK, AND THE REASON IT
+            //  HAS TO BE A CHAT COMMAND RATHER THAN A MENU ROW.
+            //
+            //  The menu row writes the `character` dvar. On the host that is the
+            //  server's dvar and it works; on anybody else it is their own local
+            //  copy and the server never reads it. There is no getclientdvar in
+            //  T6 and a client console command does not reach the server, so the
+            //  "say" notify - which carries the SPEAKING PLAYER - is the only
+            //  channel a non-host has. That is what this is.
+            //
+            //  qol_options::qol_opt_character() reads self.zmqol_char_want FIRST
+            //  and only falls back to the dvar, so the menu row still works as
+            //  the default for anyone who has not typed this, and solo behaves
+            //  exactly as it did before.
+            //
+            //  🛑 DELIBERATELY NOT ADDED TO zmqol_console_command_names(). That
+            //  watcher seeds every name in its list to "" and blanks it the
+            //  instant it sees a value - and `character` is an OWNED dvar with
+            //  its own watcher, exactly like `fly`, `god` and `ghost`. Putting
+            //  it in that list would wipe the menu row on every pass. The host
+            //  already has the console twin: the `character` dvar itself.
+            //  ================================================================
+            str_arg = "";
+
+            if ( tokens.size > 1 )
+                str_arg = tokens[1];
+
+            if ( str_arg == "" )
+            {
+                if ( isdefined( player.zmqol_char_want ) )
+                    player iprintln( "^3[zm_qol] ^7your character is set to ^3" + player.zmqol_char_want );
+                else
+                    player iprintln( "^3[zm_qol] ^7your character follows the menu (^3" + getdvarintdefault( "character", 0 ) + "^7)" );
+
+                player iprintln( "^5.character 1-4 ^7to choose, ^5.character 0 ^7for the map's own pick" );
+            }
+            else
+            {
+                n_pick = int( str_arg );
+
+                if ( n_pick < 0 || n_pick > 4 )
+                    player iprintln( "^1[zm_qol] character must be 0-4 ^7(0 = the map's own pick)" );
+                else
+                {
+                    //  0 means "go back to following the menu/lobby default",
+                    //  which is what an unset field already means - so clear it
+                    //  rather than storing a zero the resolver would honour.
+                    if ( n_pick == 0 )
+                    {
+                        player.zmqol_char_want = undefined;
+                        player iprintln( "^3[zm_qol] ^7character back to the map's own pick" );
+                    }
+                    else
+                    {
+                        player.zmqol_char_want = n_pick;
+                        player iprintln( "^2[zm_qol] ^7character ^3" + n_pick + " ^7- yours only" );
+                    }
+                }
+            }
+        }
         else if ( cmd == "nightmode" || cmd == "night" )
         {
             //  v1.59.6 - chat front-end for the night_mode dvar.
@@ -7243,7 +7360,11 @@ zmqol_help_lines()
     a_lines[a_lines.size] = "^3.brutus^7/^3.panzer^7/^3.jumpingjacks ^7(amount) ^8- Mob / Origins / Die Rise";
     a_lines[a_lines.size] = "^3.machines ^7drop every remaining machine ^8- Nuketown";
     a_lines[a_lines.size] = "^3.infammo ^7never run dry   ^3.infsprint ^7never tire   ^3.reload ^7refill";
-    a_lines[a_lines.size] = "^3.pack ^7/ ^3.unpack ^7Pack-a-Punch the held weapon";
+    //  v2.13.0 - .character folded onto this line rather than given its own,
+    //  for the line budget noted above. It is the ONE command a non-host player
+    //  needs to know exists, because the menu row cannot reach the server for
+    //  them - see the command's own block in zmqol_dev_command_listener().
+    a_lines[a_lines.size] = "^3.pack ^7/ ^3.unpack ^7Pack-a-Punch   ^3.character <1-4> ^7yours alone";
     a_lines[a_lines.size] = "^3.giveperks^7/^3.removeperks ^7  ^3.nozmspawns ^7spawns   ^3.hud ^7on/off";
     //  v1.99.25 - the six ported commands. Two lines, not six, because of the
     //  line budget noted above; .movespeed is called that and not .speed
@@ -17433,10 +17554,57 @@ onallplayersready_instant()
                 player_count_actual++;
         }
 
-        // Everyone we can actually see is in-game and the engine never gave us
-        // an expectation to match - stop waiting for a number that will not come.
-        if ( player_count_actual > 0 && gettime() > ready_deadline )
+        //  ====================================================================
+        //  🛑 v2.13.0 - THE ESCAPE HATCH USED TO FIRE WHILE SOMEONE WAS STILL
+        //  LOADING, AND THAT BROKE EVERY CO-OP GAME IT TOUCHED.
+        //
+        //  The old test was ( player_count_actual > 0 && past the deadline ).
+        //  In co-op the host reaches "playing" first and the deadline is four
+        //  seconds, so a friend on a slower disk was simply left behind: the
+        //  loop broke with one player counted, setinitialplayersconnected()
+        //  recorded a roster of one, and the block below then found
+        //  players.size == 1 and set the "solo_game" FLAG IN A CO-OP MATCH.
+        //  Stock branches on that flag in 102 places - Quick Revive, last
+        //  stand, tombstone, chugabud, power, powerups - and it only unsticks at
+        //  the first round change, when _zm::check_quickrevive_for_hotjoin()
+        //  re-derives it. Everything before that ran under solo rules, and the
+        //  second player arrived as a hot-joiner into a round already running.
+        //
+        //  🌟 MEASURED, NOT ASSUMED: stock _zm::onallplayersready has NO
+        //  deadline here at all - it spins until connected == expected - and
+        //  BO2-Reimagined, which is co-op-tested, copies stock unchanged
+        //  (scripts/zm/replaced/_zm.gsc). This deadline is this mod's own
+        //  addition, and it is the only one of the three that can start a match
+        //  short-handed.
+        //
+        //  THE FIX KEEPS THE HATCH BUT NARROWS IT TO THE CASE IT WAS BUILT FOR:
+        //  the Mods-menu game where getnumexpectedplayers() never resolves, the
+        //  loop can never be satisfied, and the player is stranded on a black
+        //  screen. Two extra conditions confine it there:
+        //
+        //    getnumexpectedplayers() == 0
+        //        the engine gave us no target at all. When it DOES give one,
+        //        stock's unbounded wait is correct and is what now runs.
+        //
+        //    player_count_actual == getnumconnectedplayers()
+        //        everyone who has reached the server is actually in-game. A
+        //        client that is connected but still loading IS counted by
+        //        getnumconnectedplayers() and is NOT counted by
+        //        player_count_actual, so this stays false while anybody is
+        //        still coming - which is precisely the case that used to be
+        //        dropped on the floor.
+        //
+        //  Solo is unchanged: expected 0, connected 1, playing 1, so it still
+        //  breaks out after the deadline instead of hanging on black.
+        //  ====================================================================
+        if ( player_count_actual > 0 && gettime() > ready_deadline
+             && getnumexpectedplayers() == 0
+             && player_count_actual == getnumconnectedplayers() )
+        {
+            println( "[zm_qol] onallplayersready: engine reported no expected count; starting with "
+                     + player_count_actual + " of " + getnumconnectedplayers() + " connected player(s) in-game" );
             break;
+        }
 
         wait 0.05;
     }

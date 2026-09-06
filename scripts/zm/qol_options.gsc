@@ -1389,6 +1389,11 @@ qol_opt_character()
     n_last = -1;
     b_last_saw_cia_flag = 0;
     b_seen_once = 0;
+    //  v2.13.0 - co-op. Remembers the level's own CIA/CDC value so a RESTART
+    //  LEVEL reroll can be spotted and this player's pick re-applied. See the
+    //  borrow-and-restore block further down for why the drift check that used
+    //  to do this job cannot work once more than one player is picking.
+    n_last_cia_value = undefined;
 
     for ( ;; )
     {
@@ -1398,8 +1403,36 @@ qol_opt_character()
             continue;
         }
 
-        n_want = getdvarintdefault( "character", 0 );
+        //  ====================================================================
+        //  🛑 v2.13.0 - THE PICK IS PER-PLAYER NOW. THE DVAR ALONE COULD NEVER
+        //  WORK IN CO-OP, AND THAT IS WHY NOBODY BUT THE HOST COULD CHOOSE.
+        //
+        //  `character` is a SERVER dvar. The menu row and the console both write
+        //  it, and on the host's machine client and server share one dvar space,
+        //  so the host's pick took. A remote player's menu writes their OWN
+        //  local dvar; the server never sees it. Worse, every player's copy of
+        //  this thread read that same server dvar, so all four were assigned the
+        //  same characterindex and the whole team wore one face.
+        //
+        //  🌟 THE ONLY PROVEN CLIENT-TO-SERVER CHANNEL IN THIS ENGINE IS CHAT.
+        //  There is no getclientdvar in T6 - checked against the GSC reference,
+        //  no such builtin - and a client console command never reaches the
+        //  server. The "say" notify does, and it carries the SPEAKING PLAYER,
+        //  which this mod's command listener has relied on since v1.5.0. So
+        //  `.character N` sets self.zmqol_char_want on whoever typed it, and
+        //  that is what this loop reads first.
+        //
+        //  The dvar stays as the fallback, so nothing that worked before stops
+        //  working: the lobby/menu row is still the default for anyone who has
+        //  not made a personal pick, and solo is completely unchanged.
+        //  ====================================================================
+        if ( isdefined( self.zmqol_char_want ) )
+            n_want = self.zmqol_char_want;
+        else
+            n_want = getdvarintdefault( "character", 0 );
+
         b_sees_cia_flag = isdefined( level.should_use_cia );
+        b_is_coop = get_players().size > 1;
 
         // ========================================================================
         //  🛑 v2.3.5 - RESTART LEVEL RE-ROLLS should_use_cia AND THIS LOOP NEVER
@@ -1434,13 +1467,35 @@ qol_opt_character()
         // ========================================================================
         b_should_use_cia_drifted = 0;
 
-        if ( n_want > 0 && b_sees_cia_flag && b_seen_once )
+        //  🛑 v2.13.0 - SOLO ONLY. This test asks "does the level's CIA/CDC
+        //  value still match MY pick", which is only a sane question while this
+        //  player owns that value. In co-op the level value belongs to the map's
+        //  own roll (see the borrow-and-restore block below), so an unmatched
+        //  value is the normal state and this would have re-applied the
+        //  character on every 0.5s pass, forever.
+        if ( !b_is_coop && n_want > 0 && b_sees_cia_flag && b_seen_once )
         {
             n_would_be_index = ( n_want - 1 ) % 4;
             b_would_want_cia = ( n_would_be_index == 0 || n_would_be_index == 2 );
 
             if ( ( level.should_use_cia == 1 ) != b_would_want_cia )
                 b_should_use_cia_drifted = 1;
+        }
+
+        //  The co-op replacement, and it asks a different question: "has the
+        //  LEVEL's value moved on its own since I last looked". Only a RESTART
+        //  LEVEL does that - survival_init rerolls it - which is exactly the
+        //  v2.3.5 case, and it fires once per reroll instead of every pass.
+        //  Nothing this function does can trip it, because the borrow below puts
+        //  the value back before this thread ever yields.
+        b_cia_value_rerolled = 0;
+
+        if ( b_sees_cia_flag )
+        {
+            if ( isdefined( n_last_cia_value ) && n_last_cia_value != level.should_use_cia && b_seen_once )
+                b_cia_value_rerolled = 1;
+
+            n_last_cia_value = level.should_use_cia;
         }
 
         //  ====================================================================
@@ -1474,7 +1529,7 @@ qol_opt_character()
         //  ====================================================================
         b_real_change = n_want != n_last;
 
-        if ( n_want > 0 && ( b_real_change || ( b_sees_cia_flag && !b_last_saw_cia_flag ) || b_should_use_cia_drifted ) )
+        if ( n_want > 0 && ( b_real_change || ( b_sees_cia_flag && !b_last_saw_cia_flag ) || b_should_use_cia_drifted || b_cia_value_rerolled ) )
         {
             n_last = n_want;
             b_last_saw_cia_flag = b_sees_cia_flag;
@@ -1514,16 +1569,68 @@ qol_opt_character()
             //  zm_transit uses it only at :88-92 and inside
             //  give_team_characters().
             //  ================================================================
+            //  ================================================================
+            //  🛑 v2.13.0 - IN CO-OP THE LEVEL FLAG IS BORROWED AND PUT BACK,
+            //  SO EACH PLAYER GETS THEIR OWN LOOK AND NOTHING ELSE NOTICES.
+            //
+            //  The note above is right that should_use_cia is a LEVEL variable,
+            //  and the old code simply wrote it - which in co-op meant the last
+            //  player to pick dressed the entire team, and the whole lobby
+            //  changed clothes every time anybody chose.
+            //
+            //  🛑 THE FIX IS NOT TO setmodel() DIRECTLY. That is the trap this
+            //  file's own header warns about, and the model names are NOT the
+            //  same on every map - measured in the stock dump:
+            //      zm_transit / zm_nuked / zm_tomb   c_zom_player_cia_fb
+            //      zm_buried                          c_zom_player_cia_dlc1_fb
+            //      zm_nuked viewhands                 c_zom_hazmat_viewhands_light
+            //  Hardcoding any of those gives an invisible player on the maps
+            //  that ship the other name.
+            //
+            //  🌟 SO LET THE MAP PICK, AND LIE TO IT FOR ONE CALL. Set the level
+            //  flag to what THIS player wants, call the map's own
+            //  givecustomcharacters (which then chooses the correct models for
+            //  the map it belongs to), and put the flag straight back.
+            //
+            //  🌟 THE BORROW IS ATOMIC, AND THAT IS MEASURED, NOT HOPED FOR. GSC
+            //  is cooperative - a thread only yields at a wait - and none of the
+            //  four give_team_characters() implementations contains a wait,
+            //  waittill or flag_wait (checked in the stock dump for zm_transit,
+            //  zm_buried, zm_nuked and zm_tomb). So no other thread can ever
+            //  observe the borrowed value.
+            //
+            //  Solo keeps the old behaviour EXACTLY - it really does own the
+            //  level value there, and the stock readers that also look at it
+            //  (_globallogic_player.gsc:278, zcleansed.gsc:51, zm_nuked.gsc:654)
+            //  must keep seeing the player's choice.
+            //  ================================================================
+            self.favorite_wall_weapons_list = [];
+
             if ( isdefined( level.should_use_cia ) )
             {
                 if ( self.characterindex == 0 || self.characterindex == 2 )
-                    level.should_use_cia = 1;
+                    n_want_cia = 1;
                 else
-                    level.should_use_cia = 0;
-            }
+                    n_want_cia = 0;
 
-            self.favorite_wall_weapons_list = [];
-            self [[ level.givecustomcharacters ]]();
+                if ( b_is_coop )
+                {
+                    n_saved_cia = level.should_use_cia;
+                    level.should_use_cia = n_want_cia;
+                    self [[ level.givecustomcharacters ]]();
+                    level.should_use_cia = n_saved_cia;
+                    n_last_cia_value = level.should_use_cia;
+                }
+                else
+                {
+                    level.should_use_cia = n_want_cia;
+                    self [[ level.givecustomcharacters ]]();
+                }
+            }
+            else
+            {
+                self [[ level.givecustomcharacters ]]();
+            }
 
             //  ================================================================
             //  🛑 v1.99.66 - THE SCOREBOARD BADGE CANNOT FOLLOW A MID-MATCH

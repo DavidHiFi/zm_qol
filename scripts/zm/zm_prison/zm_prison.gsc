@@ -538,6 +538,32 @@ qol_check_solo_status()
         level.is_forever_solo_game = 0;
 
     println( "[zm_qol] solo status: expected=" + n_expected + " connected=" + getnumconnectedplayers() + " is_forever_solo_game=" + level.is_forever_solo_game );
+
+    //  ========================================================================
+    //  🛑 v2.13.0 - THE ONE CO-OP QUESTION THIS PROJECT CANNOT ANSWER OFFLINE,
+    //  SO IT ASKS THE LOG INSTEAD OF GUESSING.
+    //
+    //  The `<= 1` above differs from stock's `== 1` only when the engine reports
+    //  ZERO expected players, and the v1.62.0 note says that is what happens on
+    //  a Mods-menu game. If it ALSO happens in a Mods-menu CO-OP game, then this
+    //  line hands a two-player match the solo rules: shared plane parts, three
+    //  afterlives, the solo Brutus and Panzer behaviour, the solo side-quest
+    //  gate, and no per-player craftable networking.
+    //
+    //  🛑 IT IS DELIBERATELY NOT "FIXED" BY GUESSING. Flipping it late is the
+    //  one thing that would be worse: zm_alcatraz_craftables builds the plane
+    //  and fuel pieces with is_shared = 1 AND client_field_state = undefined
+    //  while solo, and the co-op pickup path then does
+    //      level setclientfield( "piece_player" + n, self.client_field_state )
+    //  on that undefined name. Correcting the flag after the pieces exist would
+    //  turn a wrong-but-playable game into a script error.
+    //
+    //  So: one co-op boot on this map, and this log line settles it. If it reads
+    //  expected=0 with two players in the game, the fix is to derive the value
+    //  from the real roster BEFORE the craftables are built, not after.
+    //  ========================================================================
+    if ( n_expected <= 1 )
+        println( "[zm_qol] *** solo rules are ON. If this is a CO-OP game, this line is the bug - report it with the two counts above." );
 }
 
 

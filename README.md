@@ -88,6 +88,7 @@ Use a `.`, `!` or `/` prefix, or bind them to keys. Type `.help` in game for the
 .pack / .unpack           Pack-a-Punch or unpack the held weapon
 .giveperks / .removeperks Grant or remove perks
 .pay <player> <amount>    Send points to another player
+.character <1-4>          Pick your own character (each player, not the host's choice)
 .shield / .staff <elem>   Spawn a shield or an Origins elemental staff
 ```
 
