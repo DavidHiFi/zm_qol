@@ -752,6 +752,10 @@ zmqol_alcatraz_round_spawn_failsafe()
     self endon( "death" );
     prevorigin = self.origin;
 
+    //  v2.14.6 - the zombies that never run the shared copy still get the
+    //  death-attribution line. See quality_of_life.gsc::zmqol_nb_death_watch().
+    self scripts\zm\quality_of_life::zmqol_nb_watch_death_once();
+
     if ( !isdefined( level.zmqol_nb_said_alcatraz ) )
     {
         level.zmqol_nb_said_alcatraz = 1;

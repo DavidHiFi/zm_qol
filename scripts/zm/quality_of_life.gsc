@@ -19641,6 +19641,83 @@ zmqol_hud_round_anchor( elem )
 //  tell its own flag from one another script set, and so turning the row off
 //  mid-match puts the zombie back exactly where stock had it.
 //  ----------------------------------------------------------------------------
+//  ----------------------------------------------------------------------------
+//  zmqol_nb_watch_death_once / zmqol_nb_death_watch  -  ATTRIBUTION   (v2.14.6)
+//
+//  Second report, 2026-09-06, Origins round 2 with the row ON: the last zombie
+//  was knifed once at a barrier, the player ran to generator 2, and it died on
+//  its own. This time the log PROVED both hooks were live -
+//      [zm_qol] no_bleedout: shared failsafe hook LIVE on zm_tomb - row=1
+//      [zm_qol] no_bleedout: Origins 15s failsafe REPLACEMENT is live - row=1
+//  - and printed no SUPPRESSED and no BELOW-WORLD line. So the kill came from
+//  neither timer, and guessing which of Origins' other killers it was would be
+//  exactly the thing this project does not do.
+//
+//  🌟 IT ALSO SETTLED AN OPEN QUESTION. The "REPLACEMENT is live" line is proof
+//  that a Plutonium replaceFunc DOES reach a call made through a stored function
+//  pointer, at least when the pointer is captured after the replace:
+//  level._zombies_round_spawn_failsafe holds ::tomb_round_spawn_failsafe and the
+//  mod's copy is what ran. STOCK_REFERENCE 7a modes 2-3 are narrower than they
+//  read.
+//
+//  So this watcher names the killer instead. One line per zombie that dies with
+//  no player attacker while the row is on - what killed it, the means of death,
+//  the weapon, and whether the giant robot's foot had marked it.
+//  ----------------------------------------------------------------------------
+zmqol_nb_watch_death_once()
+{
+    if ( isdefined( self.zmqol_nb_watching ) )
+        return;
+
+    self.zmqol_nb_watching = 1;
+    self thread zmqol_nb_death_watch();
+}
+
+zmqol_nb_death_watch()
+{
+    self waittill( "death", e_attacker );
+
+    if ( !getdvarintdefault( "no_bleedout", 0 ) )
+        return;
+
+    //  A player kill is the whole point of the feature - say nothing.
+    if ( isdefined( e_attacker ) && isplayer( e_attacker ) )
+        return;
+
+    str_who = "undefined";
+
+    if ( isdefined( e_attacker ) )
+    {
+        str_who = "entity";
+
+        if ( isdefined( e_attacker.classname ) )
+            str_who = e_attacker.classname;
+
+        if ( isdefined( e_attacker.targetname ) )
+            str_who = str_who + "/" + e_attacker.targetname;
+
+        if ( isdefined( e_attacker.model ) )
+            str_who = str_who + "/" + e_attacker.model;
+    }
+
+    str_mod = "?";
+
+    if ( isdefined( self.damagemod ) )
+        str_mod = self.damagemod;
+
+    str_weap = "?";
+
+    if ( isdefined( self.damageweapon ) )
+        str_weap = self.damageweapon;
+
+    n_marked = 0;
+
+    if ( isdefined( self.marked_for_death ) && self.marked_for_death )
+        n_marked = 1;
+
+    println( "[zm_qol] no_bleedout: DEATH WITH NO PLAYER ATTACKER - by=" + str_who + " mod=" + str_mod + " weapon=" + str_weap + " robot_marked=" + n_marked + " round=" + level.round_number + " left=" + get_current_zombie_count() );
+}
+
 zmqol_nb_sync_ignore_flag()
 {
     if ( getdvarintdefault( "no_bleedout", 0 ) )
@@ -19667,6 +19744,7 @@ zmqol_round_spawn_failsafe()
     //  SECOND, unpatched failsafe onto every zombie. Setting stock's own escape
     //  hatch makes that copy return at the top of its next pass.
     self zmqol_nb_sync_ignore_flag();
+    self zmqol_nb_watch_death_once();
 
     if ( !isdefined( level.zmqol_nb_said_shared ) )
     {

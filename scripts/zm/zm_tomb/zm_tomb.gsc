@@ -17,6 +17,10 @@ main()
     //  file. The main switch-off is the ignore flag the shared copy sets; this
     //  covers the zombies that never run the shared copy at all.
     replaceFunc( maps\mp\zm_tomb::tomb_round_spawn_failsafe, ::zmqol_tomb_round_spawn_failsafe );
+
+    //  v2.14.6 - and the giant robot's foot, which kills zombies with no player
+    //  involved at all. Same row. See the banner at the end of this file.
+    replaceFunc( maps\mp\zm_tomb_giant_robot::zombie_stomp_death, ::zmqol_tomb_zombie_stomp_death );
     replaceFunc( maps\mp\zm_tomb_ee_side::check_for_change, ::origins_change_patch ); // prone "loose change" -> 100
     replaceFunc( maps\mp\zm_tomb_utility::check_solo_status, ::qol_check_solo_status ); // 1 player = solo rules
 
@@ -1898,6 +1902,10 @@ zmqol_tomb_round_spawn_failsafe()
     self endon( "death" );
     prevorigin = self.origin;
 
+    //  v2.14.6 - the zombies that never run the shared copy still get the
+    //  death-attribution line. See quality_of_life.gsc::zmqol_nb_death_watch().
+    self scripts\zm\quality_of_life::zmqol_nb_watch_death_once();
+
     if ( !isdefined( level.zmqol_nb_said_tomb ) )
     {
         level.zmqol_nb_said_tomb = 1;
@@ -1980,5 +1988,81 @@ zmqol_tomb_round_spawn_failsafe()
 
         prevorigin = self.origin;
         self.zmqol_nb_stuck = 0;
+    }
+}
+
+// ============================================================================
+//  THE GIANT ROBOT'S FOOT — the other thing that kills zombies with no player
+//  anywhere near them                                               (v2.14.6)
+// ----------------------------------------------------------------------------
+//  Origins ships more than one script that kills a zombie by itself, and the
+//  two failsafes were only the timers. This is the other one that runs in
+//  ordinary play from round 1: maps\mp\zm_tomb_giant_robot::activate_kill_trigger
+//  walks every zombie within 600 units of the foot trigger, marks each one that
+//  is touching it (`zombie.marked_for_death = 1`, `setgoalpos( own origin )`)
+//  and hands the list to zombie_stomp_death(), which does
+//      zombie dodamage( zombie.health, zombie.origin, robot );
+//  The attacker is the robot, not a player, so under the user's own definition
+//  of the row - *"they have to be actually killed by the player"* - a stomp
+//  that takes the last zombie of a round is exactly the reported bug.
+//
+//  🛑 THIS IS NOT YET PROVEN TO BE WHAT KILLED THE ROUND-2 ZOMBIE, and the
+//  banner over zmqol_nb_death_watch() in quality_of_life.gsc says why the proof
+//  is still missing. It IS proven to be a kill with no player attacker, which
+//  the row promises to stop, so it is suppressed on the same switch. The death
+//  watcher will name the killer in the next log either way.
+//
+//  What suppression costs: with the row ON a zombie standing under the foot
+//  walks out from under it instead of being crushed. Nothing else changes - the
+//  stomp fx, the sound, the screen shake and the player-crush are all in other
+//  functions and are untouched, and `marked_for_death` is cleared so the rest of
+//  the AI stops treating the zombie as a corpse. Its frozen goal repairs itself:
+//  _zm_ai_basic::find_flesh() is a while(1) that re-targets every pass.
+//
+//  📝 The `else` branch is maps\mp\zm_tomb_giant_robot.gsc:923 verbatim.
+// ============================================================================
+zmqol_tomb_zombie_stomp_death( robot, a_zombies_to_kill )
+{
+    if ( getdvarintdefault( "no_bleedout", 0 ) )
+    {
+        n_spared = 0;
+
+        for ( i = 0; i < a_zombies_to_kill.size; i++ )
+        {
+            zombie = a_zombies_to_kill[i];
+
+            if ( !isdefined( zombie ) || !isalive( zombie ) )
+                continue;
+
+            zombie.marked_for_death = undefined;
+            n_spared++;
+        }
+
+        if ( !isdefined( level.zmqol_nb_stomp_round ) || level.zmqol_nb_stomp_round != level.round_number )
+        {
+            level.zmqol_nb_stomp_round = level.round_number;
+            println( "[zm_qol] no_bleedout: SUPPRESSED giant-robot stomp - " + n_spared + " zombie(s) spared, round " + level.round_number );
+        }
+
+        return;
+    }
+
+    n_interval = 0;
+
+    for ( i = 0; i < a_zombies_to_kill.size; i++ )
+    {
+        zombie = a_zombies_to_kill[i];
+
+        if ( !isdefined( zombie ) || !isalive( zombie ) )
+            continue;
+
+        zombie dodamage( zombie.health, zombie.origin, robot );
+        n_interval++;
+
+        if ( n_interval >= 4 )
+        {
+            wait_network_frame();
+            n_interval = 0;
+        }
     }
 }
