@@ -27,19 +27,48 @@
 //
 //  WHAT DIFFERS FROM THE ORIGINAL, AND WHY (each one measured, none guessed):
 //   1. NO CLIENTFIELDS. Moon registers two 1-bit "actor" fields for the client
-//      sizzle visuals; this mod's actor set stands at 31/32 (ERROR_CATALOGUE
-//      §2). On every map this mod runs on, only the instant-pop branch of
-//      microwavegun_sizzle_zombie is reachable (see 2), and that branch's whole
-//      client job is one fx + one sound at the zombie - so the pop is
-//      broadcast from the server here (zmqol_mgun_pop), like every other
+//      sizzle visuals. On every map this mod runs on, only the instant-pop
+//      branch of microwavegun_sizzle_zombie is reachable (see 2), and that
+//      branch's whole client job is one fx + one sound at the zombie - so the
+//      pop is broadcast from the server here (zmqol_mgun_pop), like every other
 //      broadcast effect in this mod. zapgun.csc carries the include_weapon
 //      mirror only.
-//   2. THE SWELL IS UNREACHABLE. The zm_death_sizzle / zm_death_zap animstates
-//      live in Moon's aitypes; a stock aitype's compiled anim list cannot take
-//      them (§45), so hasanimstatefromasd() is false everywhere here and the
-//      original's own fallbacks run: the Wave Gun pops the zombie at once, the
-//      Zap Guns kill with the normal death animation. The animstate code is
-//      kept verbatim so the diff stays honest, not because it can fire.
+//
+//      🛑 CORRECTED 2026-09-06 - THE BIT BUDGET WAS NEVER THE REASON, AND THE
+//      OLD "31/32" HERE WAS ORIGINS' NUMBER ON A MAP THIS GUN IS SWITCHED OFF
+//      FOR. Re-measured from the per-map dumps in T6-Data-Archive-main\ZM\
+//      Clientfields\ (awk '$1=="actor"{s+=$4}'), the actor set on the four maps
+//      this gun DOES run on is nearly empty:
+//          zm_transit  4-5 / 32      zm_highrise 4-5 / 32
+//          zm_nuked      4 / 32      zm_prison  11-13 / 32
+//      (32/32 is zm_buried and 31/32 is zm_tomb - the two maps in the gate
+//      above.) Two 1-bit fields would fit with room to spare. The real blocker
+//      is the material, see 2. Do not restore the fields expecting the swell.
+//   2. THE SWELL IS UNREACHABLE, FOR TWO INDEPENDENT REASONS. Both measured
+//      2026-09-06, either one alone is fatal to it:
+//        a) THE ANIMATION. The zm_death_sizzle / zm_death_zap animstates live
+//           in Moon's aitypes; a stock aitype's compiled anim list cannot take
+//           them (§45), so hasanimstatefromasd() is false everywhere here and
+//           the original's own fallbacks run. No float-up death.
+//        b) THE SHADER. Moon's microwavegun_bloat() (its .csc, decompiled from
+//           the DLC5 zone) is not an fx at all - it ramps a shader constant,
+//           mapshaderconstant(...,"scriptVector3") then setshaderconstant with
+//           the fraction in the W component, 0 -> 0.5 over 2500 ms. That only
+//           renders because Moon's zombie materials carry a MaximumSwell
+//           constant (literal 20,0,0,1) on the techset
+//           mc_sw4_3d_char_cloth_4z8fq5wu_DLC5. Retail's zombie material -
+//           mc/mtl_c_zom_dlc0_zombie_hazmat_body_1, techset
+//           mc_sw4_3d_char_cloth_4z8fq5wu, no _dlc5 - dumps "constants": [].
+//           So the call would be a silent no-op here. Delivering the swell
+//           means owning a DLC5 techset plus a re-authored material for every
+//           zombie body variant on every map, which changes how all zombies
+//           render at all times - not a Wave Gun change.
+//      🌟 AND THE FALLBACK IS NOT A COMPROMISE: on a map with no sizzle
+//      animstate Moon's OWN code takes the same instant_explode branch, which
+//      sets the expand clientfield with initial_hit_occurred still false, and
+//      that lands on its client else-branch = the mist fx + wpn_mgun_explode_
+//      zombie. Byte for byte what zmqol_mgun_pop() does from the server.
+//      The animstate code is kept verbatim so the diff stays honest.
 //   3. NO VOICE LINES. Moon's kill/pickup vox ("micro_single", "micro_dual",
 //      "wpck_microwave") are Moon-character aliases no stock map carries, so the
 //      create_and_play_dialog calls are out and the pickup vox category is "".
@@ -555,10 +584,21 @@ microwavegun_sizzle_zombie( player, sizzle_vec, index )
         }
         else
         {
-            //  Moon: the initial-hit clientfield (eye fx + wpn_mgun_impact_zombie,
-            //  which has no payload in any bank) and the swell driven by the
-            //  death anim's notetracks. Unreachable here; the pop is served from
-            //  the "explode" notetrack the same way for parity.
+            //  Moon: the initial-hit clientfield (eye fx + wpn_mgun_impact_zombie)
+            //  and the swell driven by the death anim's notetracks. Unreachable
+            //  here; the pop is served from the "explode" notetrack the same way
+            //  for parity.
+            //
+            //  📝 wpn_mgun_impact_zombie IS SILENT IN TREYARCH'S OWN BUILD, so
+            //  nothing is being withheld. Re-confirmed 2026-09-06 by hashing the
+            //  name with SND_HashName (seed 0x1505, c + 0x1003F*h, lowercased)
+            //  to @cd8064c2 and finding that row in the DLC5 Moon bank
+            //  zmb_blops_moon.all with an EMPTY FileSource - one of the 698
+            //  payload-less aliases of §47. The same hash run over
+            //  wpn_mgun_explode_zombie gives @323a08e1, whose three rows resolve
+            //  to sound\_unnamed\{8a417db0,17e5f16f,a58a652e}.wav - the exact
+            //  three payloads this mod already ships, which is what proves the
+            //  method rather than assuming it.
             self.nodeathragdoll = 1;
             self.handle_death_notetracks = ::microwavegun_handle_death_notetracks;
         }
