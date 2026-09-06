@@ -160,6 +160,9 @@ The mod is free and always will be. Any amount of support is greatly appreciated
 * **No perk limit:**
   * Carry as many as you like by default, or set a cap of 1–12 from the pre-game lobby.
 
+* **Solo Easter Eggs:**
+  * A **SOLO EASTER EGGS** switch in the pre-game lobby on TranZit, Die Rise, Buried and Origins. Turn it on and the main quest scales to however many players are actually in the lobby, instead of always demanding four. Off by default, and the row is only shown on those four maps in Classic — never on Survival or Grief.
+
 * **Instant Pack-a-Punch:**
   * Instant Pack-a-Punch, like in Call of Duty: Black Ops Cold War - Zombies. It can be turned on or off in the settings menu.
 
@@ -202,6 +205,7 @@ The mod is free and always will be. Any amount of support is greatly appreciated
 | **5and5** — [BO2-Remix](https://github.com/5and5/BO2-Remix) | The Die Rise weapon changes — the Sliquifier's pre-nerf behaviour and the Semtex wall buy. |
 | **Fraaagaaa** — [Strat Tester](https://github.com/Fraaagaaa/Strat-Tester-BO2) | Every destination in the teleport list except Nuketown's three, which are the map's own respawn points. |
 | **B2ORG** — [T6-B2OP-PATCH](https://github.com/B2ORG/T6-B2OP-PATCH)<br><sub>built with **Astrox** and **NoMoleMan**</sub> | The basis for most of the patches — rebuilt against the game's own scripts rather than copied wholesale. |
+| **Hadi77KSA** — [Any Player EE Scripts](https://github.com/Hadi77KSA/Plutonium-T6-Any-Player-EE-Scripts)<br><sub>building on work by **CCDeroga**, **teh_bandit**, **DaddyDontStop**, **shyperson0/znchi** and **Stick Gaming/Nathan3197**</sub> | The Solo Easter Eggs option — the quest steps that scale to the number of players on TranZit, Die Rise, Buried and Origins. |
 
 Built on [**Plutonium**](https://plutonium.pw), with **OpenAssetTools** and **xensik**'s **gsc-tool**. The optional ReShade install ships unmodified work by **crosire** ([ReShade](https://reshade.me)), **Barbatos Bachiko**, **Alex Tuduran**, **Marot Satil** and the **GShade** project, **Ioxa**, **Lord of Lunacy**, **prod80**, and **NVIDIA**.
 

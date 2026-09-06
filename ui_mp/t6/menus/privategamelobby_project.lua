@@ -694,6 +694,80 @@ CoD.PrivateGameLobby.Dvars[3].maps = {}
 CoD.PrivateGameLobby.Dvars[3].maps[1] = "zm_nuked"
 CoD.PrivateGameLobby.Dvars[3].modeGroups = {}
 CoD.PrivateGameLobby.Dvars[3].modeGroups[1] = "zsurvival"
+
+-- ===========================================================================
+--  SOLO EASTER EGGS  -  classic maps only, v2.14.3, user request 2026-09-06
+-- ===========================================================================
+--  *"in all the classic maps in the pre-game lobby screen, add an option to
+--  enable/disable solo easter eggs ... make sure to not add that option into
+--  survival maps that dont have easter eggs."*
+--
+--  The server half is four files, one per map, each named qol_solo_ee.gsc and
+--  living in that map's own scripts\zm\<map>\ folder. They are adapted from
+--  Hadi77KSA's "Plutonium T6 Any Player EE Scripts" v2.4.1; each reads this
+--  dvar once, after flag_wait( "initial_players_connected" ).
+--
+--  🌟 THE FILTERS ARE THE ONES ALREADY BUILT FOR THE CHARACTER AND MACHINE
+--  DROPS ROWS - `maps` is Treyarch's own, `modeGroups` was added in v1.99.58 -
+--  so this is one table entry and no new machinery.
+--
+--  🛑 THE MAP LIST IS THE ANSWER TO "not on survival maps that have no Easter
+--  Egg", AND IT IS DELIBERATELY NOT ALL FIVE CLASSIC MAPS:
+--
+--    zm_transit / zm_highrise / zm_buried / zm_tomb   -> listed. Each has a
+--        qol_solo_ee.gsc that changes something on that map.
+--    zm_prison (Mob of the Dead)                      -> NOT listed. Its
+--        Easter Egg is real, but the source mod does not cover it (its README
+--        points at teh_bandit's separate motd_solo.gsc, which is not in this
+--        workspace). A row that changed nothing would be exactly the kind of
+--        lie the user asked to keep out of survival maps, so it is absent
+--        until the script exists.
+--    zm_nuked (Nuketown)                              -> NOT listed, and could
+--        not be: it has no Easter Egg and is not a classic map at all.
+--
+--  🛑 SURVIVAL AND GRIEF ARE EXCLUDED TWICE OVER, ON PURPOSE. modeGroups pins
+--  the row to "zclassic", so Bus Depot / Farm / Town / Diner / Borough /
+--  Cell Block / Rooftop never draw it even though four of them share a
+--  level.script with a classic map. The GSC half then repeats the check with
+--  stock's own maps\mp\zombies\_zm_sidequests::is_sidequest_allowed(
+--  "zclassic" ), which reads g_gametype - "zstandard" for survival, "zgrief"
+--  for grief - so even a dvar set by hand at the console cannot leak the
+--  behaviour into a mode that has no quest to change.
+--
+--  📝 DEFAULT 0 = STOCK, and that is the project rule, not timidity: a new
+--  toggle must not silently change what the mod already does. The red cross
+--  therefore appears when the row is ENABLED, which is correct - Treyarch's
+--  Easter Eggs want four players.
+--
+--  📝 ROW BUDGET. A classic map currently draws six rows (CHARACTER, plus
+--  DIFFICULTY / STARTING ROUND / HEADSHOTS ONLY, plus CHEATS / PERK LIMIT);
+--  this makes seven. Nuketown and Green Run survival already draw eight, so
+--  the hint text sits no lower here than on a screen that already ships.
+--
+--  🛑 THE DVAR NAME IS FROZEN once this ships - it is what the console takes
+--  and what lands in the player's archived config. Renaming the label is free;
+--  renaming `solo_ee` silently resets everyone's saved choice.
+--
+--  📝 The hint is 84 characters. ~90 is the measured ceiling before it wraps
+--  into the map preview panel - see the MACHINE DROPS note above.
+CoD.PrivateGameLobby.DvarDefaults["solo_ee"] = 0
+CoD.PrivateGameLobby.Dvars[4] = {}
+CoD.PrivateGameLobby.Dvars[4].id = "solo_ee"
+CoD.PrivateGameLobby.Dvars[4].name = "SOLO EASTER EGGS"
+CoD.PrivateGameLobby.Dvars[4].hintText = "Lets this map's main Easter Egg quest be finished with fewer than four players."
+CoD.PrivateGameLobby.Dvars[4].labels = {}
+CoD.PrivateGameLobby.Dvars[4].labels[1] = "MENU_DISABLED_CAPS"
+CoD.PrivateGameLobby.Dvars[4].labels[2] = "MENU_ENABLED_CAPS"
+CoD.PrivateGameLobby.Dvars[4].values = {}
+CoD.PrivateGameLobby.Dvars[4].values[1] = 0
+CoD.PrivateGameLobby.Dvars[4].values[2] = 1
+CoD.PrivateGameLobby.Dvars[4].maps = {}
+CoD.PrivateGameLobby.Dvars[4].maps[1] = "zm_transit"
+CoD.PrivateGameLobby.Dvars[4].maps[2] = "zm_highrise"
+CoD.PrivateGameLobby.Dvars[4].maps[3] = "zm_buried"
+CoD.PrivateGameLobby.Dvars[4].maps[4] = "zm_tomb"
+CoD.PrivateGameLobby.Dvars[4].modeGroups = {}
+CoD.PrivateGameLobby.Dvars[4].modeGroups[1] = "zclassic"
 CoD.PrivateGameLobby.ButtonPrompt_TeamPrev = function (f1_arg0, ClientInstance)
 	if Engine.PartyHostIsReadyToStart() == true then
 		return 

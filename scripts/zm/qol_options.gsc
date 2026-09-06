@@ -75,6 +75,21 @@ init()
     //  in the SOUND tab reads the way a player expects.
     qol_opt_dvar( "voice_lines",           "1" );
     qol_opt_dvar( "coop_pause",            "0" );
+    //  v2.14.3 - SOLO EASTER EGGS, the pre-game lobby row (user, 2026-09-06).
+    //  Registered here only so it shows up in console autocomplete and holds a
+    //  real value on the first open of a lobby; the row itself lives in
+    //  ui_mp\t6\menus\privategamelobby_project.lua and the behaviour lives in
+    //  four per-map files named scripts\zm\<map>\qol_solo_ee.gsc.
+    //
+    //  🛑 qol_opt_dvar() only writes when the dvar is EMPTY, which is what
+    //  makes this safe to run on every map: the lobby writes solo_ee before the
+    //  level loads, and seeding it unconditionally here would throw that choice
+    //  away on the way into the match.
+    //
+    //  📝 Default 0 = stock. Registered on EVERY map even though only four
+    //  maps read it - a registration is not a behaviour, and the four readers
+    //  are each behind stock's own is_sidequest_allowed( "zclassic" ) gate.
+    qol_opt_dvar( "solo_ee",               "0" );
     //  v1.99.91 - the ADVANCED tab's FOG row and the .fog command both write
     //  this; quality_of_life::zmqol_fog_dvar_watch() carries it to r_fog. It
     //  exists because r_fog is cheat-protected and therefore never archived,
