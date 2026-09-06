@@ -12210,6 +12210,22 @@ zmqol_bonus_points_player_powerup( item, player )
 //  playlocalsound() is stock's own call for this (announcer lines are 2D, per
 //  player); get_players() rather than a team filter because these are this mod's
 //  own power-ups and every player hears them.
+//
+//  🛑 v2.14.1 - THE ALIAS ROW'S MIXER SETTINGS DECIDE WHETHER THIS IS HEARD, AND
+//  TWO OF THE FOUR LINES HAD THE WRONG ONES. Nothing in this function was at
+//  fault: Death Machine and Bonfire Sale shipped on bus_hdrfx / grp_hdrfx /
+//  snp_hdrfx at volume 73 with pitch +200, because their rows were copied
+//  verbatim from the zmb_vox_ann_* rows their payloads came out of - and those
+//  are DEV LEFTOVERS (FileSource devraw\..., played by none of the 2,093 stock
+//  scripts), so Treyarch's mix on them was never exercised. snp_hdrfx is ducked
+//  by other audio, which is exactly what a power-up grab always has. Measured
+//  against zmb_highrise.english's own table: all six announcer rows the game
+//  really plays - carpenter, doublepoints, firesale, instakill, maxammo, nuke -
+//  use bus_voice / grp_voice / snp_never_duck / vol 84 / pitch 0 / priority 100
+//  / pan quad / reverb 0, and so do this mod's two CONFIRMED-AUDIBLE lines
+//  (Zombie Blood, Blood Money). All eight rows now match that shape.
+//  📝 If a future announcer line is added, copy an existing *_qol_powerup_* row
+//  in soundbank\mod.all.aliases.additions.csv - never a zmb_vox_ann_* row.
 // ============================================================================
 zmqol_play_announcer_line( str_suffix )
 {
