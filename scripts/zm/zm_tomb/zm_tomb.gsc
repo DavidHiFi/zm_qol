@@ -102,60 +102,53 @@ main()
     //  version ran inline here and found zero structs. See the function.
     level thread zmqol_mp40_keep_wallbuys_stalker();
 
-    // --- custom survival start locations: Trenches, Excavation Site, Church, The Crazy Place ---
+    // ========================================================================
+    //  ORIGINS SURVIVAL - THE CRAZY PLACE                            (v2.14.0)
+    //
+    //  User, 2026-09-06: *"add crazy place survival for origins from the
+    //  reimagined mod into my mod"*.
+    //
+    //  Stock zm_tomb_gamemodes::init registers zclassic and the single "tomb"
+    //  location and nothing else - Origins has no survival mode at all. The
+    //  replacement adds zstandard + zgrief and one location, crazy_place, whose
+    //  arena is the nine zone_chamber_* zones. Everything the arena needs
+    //  (spawns, four perk machines, Pack-a-Punch, four wall-buys) is registered
+    //  from script in scripts\zm\locs\zm_tomb_loc_crazy_place.gsc, so CLASSIC
+    //  ORIGINS IS UNTOUCHED - no mapents file is shipped for this map.
+    //
+    //  📝 The 2026-08 version of this port also carried Reimagined's replaced
+    //  zm_tomb_dig, zm_tomb_giant_robot and zm_tomb_ee_side (dig sites, walking
+    //  robots and the side easter eggs on the OTHER three Origins arenas). None
+    //  of the three is reachable from a sealed chamber, so none is restored.
+    // ========================================================================
+    replaceFunc( maps\mp\zm_tomb_gamemodes::init, scripts\zm\replaced\zm_tomb_gamemodes::init );
 
     // ========================================================================
     //  ORIGINS SURVIVAL - the zone-capture / generator system.
     //
-    //  Fixes, reported on Trenches:
-    //    - Speed Cola machine missing, with part of it still poking through the
-    //      wall where the robot steps
-    //    - mystery box refusing to open, demanding the generator be powered
-    //    - starting a generator giving no capture progress ring, and spawning
-    //      Templars as if it were classic Origins
-    //    - dig sites visible where no shovel can be obtained
+    //  Stock zm_tomb_capture_zones assumes classic Origins: every perk machine
+    //  and mystery box is OWNED by a generator zone and gated behind capturing
+    //  it. A standalone arena has no reachable generator, so a machine handed to
+    //  one is locked for the whole match and the Pack-a-Punch never comes back
+    //  out of the ghost() it is put into at init.
     //
-    //  These are all one subsystem. Stock zm_tomb_capture_zones assumes classic
-    //  Origins: perk machines and mystery boxes are OWNED by generator zones and
-    //  gated behind capturing them. A standalone survival arena has no generator
-    //  to capture, so the machine never finishes spawning and the box never
-    //  unlocks.
+    //  🛑 FIVE FUNCTIONS, EACH STOCK VERBATIM PLUS ONE is_classic() RETURN -
+    //  see the header of scripts\zm\replaced\zm_tomb_capture_zones.gsc for what
+    //  each one does and why it is here. Classic Origins takes the stock path in
+    //  all five and is byte-for-byte unchanged.
     //
-    //  BO2-Reimagined already solves this and its version is explicitly
-    //  location-aware - it branches on ui_zm_mapstartlocation == trenches /
-    //  excavation_site / church as well as is_classic(), so classic Origins keeps
-    //  stock behaviour. That matters here: the standing instruction is to add the
-    //  survival locations WITHOUT altering the base maps.
-    //
-    //  Ported verbatim to scripts\zm\replaced\zm_tomb_capture_zones.gsc. Its 21
-    //  #includes are all stock maps\mp\ scripts, so it drags in no other
-    //  Reimagined file, and all 18 hooked functions were verified present in the
-    //  ported copy before wiring these up.
+    //  📝 Reimagined solves the same problem by replacing that file wholesale
+    //  (880 lines, 18 functions). Deliberately NOT copied: their version also
+    //  rewrites the capture-progress rules, the objective indices (31/30/29..24
+    //  against stock's 0..3) and the recapture rounds, and precaches six
+    //  ZM_TOMB_OBJ_RECAPTURE_ZOMBIE_* strings stock does not have. All of that
+    //  lands on CLASSIC Origins, which nobody asked to change.
     // ========================================================================
-
-    // 🛑 Dig sites appearing on survival, where no shovel can be obtained.
-    // Reimagined's init_shovel returns early on !is_classic() before precaching
-    // and placing the dig mounds, so the sites simply do not exist outside
-    // classic Origins. Our copy has the two
-    // scripts\zm\reimagined\_zm_weap_bouncingbetty calls stripped out of
-    // swap_weapon (a function we do not hook - ::custom_swap_weapon above
-    // replaces it): they are the file's only references to a Reimagined-only
-    // script and would have been unresolved externals that killed the load.
-
-    // 🛑 Giant robots walking through the survival arenas. Stock zm_tomb::main()
-    // calls init_giant_robot() with no gametype guard at all, so all three robots
-    // cycle across every survival location with shootable foot soles and enterable
-    // head hatches. Our robot_cycling() returns immediately on !is_classic(), which
-    // leaves them spawned but ghosted/inert. See the file header for why they are
-    // still spawned rather than skipped outright (_zm_weap_beacon indexes them).
-
-    // 🛑 Side easter eggs (one inch punch prompts, quadrotor medallions, the
-    // wagon fire challenge, the wall poster, the light show) running on survival
-    // arenas that can never reach the quest they belong to. The replacement keeps
-    // the radio song and the loose-change perk-machine reward - see that file's
-    // header for the full inventory and for why it MUST register light_show.
-    // zm_tomb::main() does `level thread maps\mp\zm_tomb_ee_side::init()`, a
-    // qualified threaded cross-file call, so this hook is the reliable kind.
+    replaceFunc( maps\mp\zm_tomb_capture_zones::register_elements_powered_by_zone_capture_generators, scripts\zm\replaced\zm_tomb_capture_zones::register_elements_powered_by_zone_capture_generators );
+    replaceFunc( maps\mp\zm_tomb_capture_zones::check_perk_machine_valid,   scripts\zm\replaced\zm_tomb_capture_zones::check_perk_machine_valid );
+    replaceFunc( maps\mp\zm_tomb_capture_zones::pack_a_punch_init,          scripts\zm\replaced\zm_tomb_capture_zones::pack_a_punch_init );
+    replaceFunc( maps\mp\zm_tomb_capture_zones::recapture_round_tracker,    scripts\zm\replaced\zm_tomb_capture_zones::recapture_round_tracker );
+    replaceFunc( maps\mp\zm_tomb_capture_zones::all_zones_captured_vo,      scripts\zm\replaced\zm_tomb_capture_zones::all_zones_captured_vo );
 
     // Must run in main(), before the map registers its own clientfields.
     zmqol_register_survival_clientfields();
@@ -241,11 +234,48 @@ zmqol_register_survival_clientfields()
     registerclientfield( "scriptmover", "bryce_cake",      14000, 2, "int", undefined, 0 );
     registerclientfield( "scriptmover", "switch_spark",    14000, 1, "int", undefined, 0 );
 
+    // ========================================================================
+    //  🛑 v2.14.0 - "THE GUARD TO REVISIT" ABOVE IS NOW LIVE.
+    //
+    //  The comment above says these two mirrors are safe against
+    //  double-registration only while no survival location spawns a perk
+    //  machine, and names the trigger: "did we add perk machines to a loc
+    //  script?". The Crazy Place does exactly that - four machines and a
+    //  Pack-a-Punch, registered from
+    //  scripts\zm\locs\zm_tomb_loc_crazy_place.gsc::struct_init.
+    //
+    //  With machines present, _zm_perks::init() no longer bails at its
+    //  vending_triggers.size < 1 check, its custom-perk loop runs, and
+    //  init_electric_cherry() / init_divetonuke() register these two
+    //  themselves - so registering them here as well would be the duplicate,
+    //  not the fix.
+    // ========================================================================
+    if ( zmqol_loc_spawns_perk_machines() )
+    {
+        println( "[zm_qol] tomb survival clientfields: 4 registered; electric cherry + divetonuke LEFT TO STOCK (this location has perk machines)" );
+        return;
+    }
+
     // Mirror of _zm_perk_electric_cherry::init_electric_cherry (stock signature).
     registerclientfield( "allplayers", "electric_cherry_reload_fx", 9000, 2, "int" );
 
+    println( "[zm_qol] tomb survival clientfields: 5 registered (no perk machine on this location)" );
+
     // The divetonuke visionset cannot be registered from here - see
     // zmqol_register_survival_visionset() below.
+}
+
+// ============================================================================
+//  zmqol_loc_spawns_perk_machines
+//
+//  True for the survival locations whose loc script registers zm_perk_machine
+//  structs of its own. Reads the dvar rather than level.scr_zm_map_start_location
+//  because main() runs before _zm::main() assigns that - the same reason
+//  loc_common::wallbuy_match_string() reads the dvars.
+// ============================================================================
+zmqol_loc_spawns_perk_machines()
+{
+    return getdvar( "ui_zm_mapstartlocation" ) == "crazy_place";
 }
 
 // ============================================================================
@@ -281,6 +311,17 @@ zmqol_register_survival_visionset()
 {
     if ( is_classic() )
         return;
+
+    //  🛑 v2.14.0 - same reason as the electric-cherry half above: on a location
+    //  that spawns its own perk machines, _zm_perks::init() runs the custom-perk
+    //  loop and _zm_perk_divetonuke::init_divetonuke() registers this visionset
+    //  itself. Registering it twice would change visionset_slot's bit count on
+    //  the server only, which is the mismatch this whole block exists to avoid.
+    if ( zmqol_loc_spawns_perk_machines() )
+    {
+        println( "[zm_qol] tomb survival visionset: LEFT TO STOCK (this location has perk machines)" );
+        return;
+    }
 
     if ( !isdefined( level.vsmgr ) || !isdefined( level.vsmgr["visionset"] ) )
         return;

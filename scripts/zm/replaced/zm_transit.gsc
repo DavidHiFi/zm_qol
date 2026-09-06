@@ -14,7 +14,9 @@
 // ============================================================================
 //  transit_zone_init   -   replaces maps\mp\zm_transit::transit_zone_init
 //
-//  🛑 Fixes: TUNNEL AND POWER STATION SURVIVAL KILL THE PLAYER AT MAP LOAD.
+//  🛑 Fixes: POWER STATION SURVIVAL KILLS THE PLAYER AT MAP LOAD.
+//  (Tunnel had the identical fault and is the case the derivation below is
+//   written against; that location was removed in v2.14.0, Power's fix stays.)
 //
 //  The body below is STOCK, verbatim, with ONE addition at the end (the
 //  zone_init/enable_zone block). Everything else is unchanged so classic
@@ -149,11 +151,12 @@ transit_zone_init()
     // future stock path starts creating them.
     if ( !is_classic() )
     {
-        if ( getdvar( "ui_zm_mapstartlocation" ) == "tunnel" )
-        {
-            zone_init( "zone_amb_tunnel" );
-            enable_zone( "zone_amb_tunnel" );
-        }
+        // 📝 v2.14.0 - the Tunnel block that stood here (zone_init +
+        // enable_zone on zone_amb_tunnel, gated on ui_zm_mapstartlocation ==
+        // "tunnel") is gone with the location itself, removed at the user's
+        // request. Power's half below is untouched, and the WHY section at the
+        // top of this file still explains the mechanism through the Tunnel case
+        // because that is where it was first measured.
 
         // 🛑 Power Station survival: instant death on spawn.
         //

@@ -160,8 +160,8 @@ end
 --  small caption as <location> .. " / " .. <gametype>, taking <location> from
 --  zm/gametypestable.csv section 5 (column 3 = ui_zm_mapstartlocation, column
 --  4 = the ALL CAPS localize key - the diner row is
---  5,6,zm_transit,diner,ZMUI_DINER_CAPS,...). power, tunnel and the three Die
---  Rise locations have NO row in the stock table (dumped 2026-09-02), so the
+--  5,6,zm_transit,diner,ZMUI_DINER_CAPS,...). power, crazy_place and the three
+--  Die Rise locations have NO row in the stock table (dumped 2026-09-02), so the
 --  lookup hands back "" and the caption comes out " / SURVIVAL". The big
 --  "GREEN RUN" line is the MAP name and is correct - stock's own Diner reads
 --  "GREEN RUN" over "DINER / SURVIVAL", which is the shape restored here.
@@ -174,9 +174,10 @@ end
 --  mod.ff would override every gametype row on every map, which is why this
 --  mod keeps to the Lua route.
 --
---  The preview IMAGE is untouched: all 14 menu_/loadscreen_ materials are in
---  mod.ff (Unlinker --list, 2026-09-02) with the same images Reimagined uses
---  for them (Tunnel = the bus-depot picture, Die Rise trio = the rooftop one).
+--  The preview IMAGE is untouched: the menu_/loadscreen_ material pair for
+--  every added location is in mod.ff (Unlinker --list) with the same images
+--  Reimagined uses for them (Die Rise trio = the rooftop picture, The Crazy
+--  Place = Origins' own survival/loadscreen art).
 -- ============================================================================
 if CoD.MapInfoImage ~= nil and CoD.MapInfoImage.ZombieUpdate ~= nil and CoD.MapInfoImage.ZmQolCaptionWrapped ~= true then
 	CoD.MapInfoImage.ZmQolCaptionWrapped = true
@@ -186,10 +187,10 @@ if CoD.MapInfoImage ~= nil and CoD.MapInfoImage.ZombieUpdate ~= nil and CoD.MapI
 	-- ALL CAPS, because stock's column-4 keys are the _CAPS strings.
 	local ZmQolLocationCaptions = {
 		power          = "POWER STATION",
-		tunnel         = "TUNNEL",
 		shopping_mall  = "SHOPPING MALL",
 		dragon_rooftop = "DRAGON ROOFTOP",
 		sweatshop      = "SWEATSHOP",
+		crazy_place    = "THE CRAZY PLACE",
 		diner          = "DINER",
 		cellblock      = "CELL BLOCK",
 		street         = "BOROUGH",
@@ -1494,9 +1495,9 @@ end
 --
 --  Repoints the lobby's "Change Map" / "Change Game Mode" buttons at the two
 --  list popups defined in ui_mp/t6/zombie/selectmaplistzombie.lua, so every
---  survival start location (including the ones the ported GSC adds - Tunnel,
---  Cornfield, Shopping Mall, Dragon Rooftop, Sweatshop, Maze, Docks, Trenches,
---  Excavation Site, Church, The Crazy Place) is pickable from one flat list.
+--  survival start location (including the ones this mod's GSC adds - Diner,
+--  Power Station, Shopping Mall, Dragon Rooftop, Sweatshop, Borough, Cell Block
+--  and The Crazy Place) is pickable from one flat list.
 --  Ported from BO2-Reimagined; same pure-override pattern as ButtonStartGame.
 --
 --  The require is wrapped in pcall per CLAUDE.md rule 5 - a bad require would

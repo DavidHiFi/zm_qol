@@ -143,7 +143,6 @@ The mod is free and always will be. Any amount of support is greatly appreciated
 * **TranZit**
   * Diner
   * Power Station
-  * Tunnel
 * **Die Rise**
   * Shopping Mall
   * Dragon Rooftop
@@ -152,6 +151,8 @@ The mod is free and always will be. Any amount of support is greatly appreciated
   * Cell Block
 * **Buried**
   * Borough
+* **Origins**
+  * The Crazy Place
 
 * **Der Wunderfizz Machine on all maps:**
   * The random perk machine is available on every map, not just Origins.

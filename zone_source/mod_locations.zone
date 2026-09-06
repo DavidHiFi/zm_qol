@@ -1553,32 +1553,44 @@ attachmentunique,au_peacekeeper_reflex
 // ============================================================================
 
 // ============================================================================
-//  RESTORED SURVIVAL LOCATIONS (2026-09-02, user request)
-//  Power Station + Tunnel (TranZit), Shopping Mall + Dragon Rooftop + Sweatshop
-//  (Die Rise), Cell Block (Mob), Borough (Buried). Everything below was in the
-//  pre-strip zone (git d722590) except the XANIM section, which is new - and is
-//  the suspected fix for the pre-strip Borough frozen-zombie failure.
-//  Cornfield, Maze, Docks and the four Origins arenas stay out (excluded from
-//  the restoration by the same request).
+//  ADDED SURVIVAL LOCATIONS (2026-09-02 restoration, user request)
+//  Power Station (TranZit), Shopping Mall + Dragon Rooftop + Sweatshop (Die
+//  Rise), Cell Block (Mob), Borough (Buried), and as of v2.14.0 The Crazy Place
+//  (Origins). Everything below was in the pre-strip zone (git d722590) except
+//  the XANIM section, which is new - and is the suspected fix for the pre-strip
+//  Borough frozen-zombie failure. Cornfield, Maze, Docks and Origins' other
+//  three arenas stay out.
+//
+//  TUNNEL'S TWO MATERIALS WERE REMOVED IN v2.14.0 with the location itself.
+//  Their .json sources are still in zone_assets\materials\ and are inert - an
+//  undeclared material is never linked - so restoring Tunnel would need only
+//  those two lines back.
 // ============================================================================
 
 // --- lobby previews + loading screens for the restored locations.
 //     JSON sources in zone_assets\materials\; the images they reference are in
 //     zone_assets\images\ (and build.bat syncs them into images\ for mod.iwd).
 material,menu_zm_transit_zsurvival_power
-material,menu_zm_transit_zsurvival_tunnel
 material,menu_zm_highrise_zsurvival_shopping_mall
 material,menu_zm_highrise_zsurvival_dragon_rooftop
 material,menu_zm_highrise_zsurvival_sweatshop
 material,menu_zm_buried_zsurvival_street
 material,menu_zm_prison_zsurvival_cellblock
 material,loadscreen_zm_transit_zstandard_power
-material,loadscreen_zm_transit_zstandard_tunnel
 material,loadscreen_zm_highrise_zstandard_shopping_mall
 material,loadscreen_zm_highrise_zstandard_dragon_rooftop
 material,loadscreen_zm_highrise_zstandard_sweatshop
 material,loadscreen_zm_buried_zstandard_street
 material,loadscreen_zm_prison_zstandard_cellblock
+
+// --- v2.14.0: THE CRAZY PLACE (Origins survival).
+//     Both .json sources already shipped in zone_assets\materials\ from the
+//     pre-strip era, so only the two declarations below are new. Neither needs
+//     a new image: the menu material points at menu_zm_tomb_zsurvival_tomb and
+//     the loadscreen at loadscreen_zombie_le_tombeau_zstandard, and both .iwi
+//     are already in zone_assets\images\ (and in images\ for mod.iwd).
+material,menu_zm_tomb_zsurvival_crazy_place
+material,loadscreen_zm_tomb_zstandard_crazy_place
 
 // ============================================================================
 //  SURVIVAL PLAYER CHARACTERS (Die Rise + Borough: the CDC/CIA teams)

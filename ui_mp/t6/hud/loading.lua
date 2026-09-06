@@ -716,15 +716,16 @@ function CoD.Loading.GetZMLoadingMapName()
 		return StockName
 	end
 
-	-- zm_qol: caps titles for the restored survival locations that have NO row
-	-- in stock zm\gametypestable.csv (dumped 2026-09-02: power, tunnel and the
-	-- three Die Rise locations are absent; diner/cellblock/street have rows).
+	-- zm_qol: caps titles for the survival locations that have NO row in stock
+	-- zm\gametypestable.csv (dumped 2026-09-02: power and the three Die Rise
+	-- locations are absent; diner/cellblock/street have rows). crazy_place is
+	-- absent for the same reason - Origins has no survival row of any kind.
 	local ZmQolLocationTitles = {
 		power          = "POWER STATION",
-		tunnel         = "TUNNEL",
 		shopping_mall  = "SHOPPING MALL",
 		dragon_rooftop = "DRAGON ROOFTOP",
 		sweatshop      = "SWEATSHOP",
+		crazy_place    = "THE CRAZY PLACE",
 	}
 	if ZmQolLocationTitles[location] ~= nil then
 		return ZmQolLocationTitles[location]

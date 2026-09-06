@@ -8,6 +8,11 @@
 main()
 {
     replaceFunc(clientscripts\mp\zm_tomb::include_weapons, ::include_weapons);
+
+    // --- Origins survival, The Crazy Place: client half. The server half is
+    //     scripts\zm\replaced\zm_tomb_gamemodes.gsc, hooked from
+    //     scripts\zm\zm_tomb\zm_tomb.gsc::main(). Ship the two together. ---
+    replaceFunc(clientscripts\mp\zm_tomb::init_gamemodes, ::init_gamemodes);
 }
 
 // ============================================================================
@@ -19,18 +24,20 @@ main()
 //  Origins is worse than Mob of the Dead: stock
 //  clientscripts\mp\zm_tomb::init_gamemodes registers ONLY zclassic, while
 //  scripts\zm\replaced\zm_tomb_gamemodes.gsc adds zstandard AND zgrief on the
-//  server (Trenches, Excavation Site, Church, Crazy Place).
+//  server (The Crazy Place, v2.14.0). With the client registering neither, its
+//  start_zombie_gametype() bails, the loading state is never released, and the
+//  map hangs on the loading screen instead of starting.
 //
-//  This was masked until now: Origins survival was dropping at the clientfield
-//  check (EXE_CLIENT_FIELD_MISMATCH) before it could ever reach the client's
-//  gametype startup. With that fixed in zm_tomb.gsc, this gap becomes the next
-//  thing in the way - so the two changes have to ship together.
+//  Both new modes point crazy_place at zm_tomb_classic's client location
+//  functions. That is the same technique already shipping on Die Rise and
+//  Buried, and Origins has exactly one client location script, so it is the
+//  only correct target. It also keeps the clientfield sets symmetrical: the
+//  client only registers a location's buildables when a location script
+//  actually runs (_zm_buildables.csc registers on the FIRST buildable added),
+//  which is what produced "Clientfield buildable in set [toplayer] is not
+//  registered on the client" on Die Rise before the same fix.
 //
-//  The four custom locations get no client-side location funcs, matching the
-//  server (which routes them to scripts\zm\locs\*) and matching TranZit's Diner,
-//  which works with none.
-//
-//  🛑 NOT verified in game yet.
+//  🛑 NOT verified in game yet - Origins survival has never booted.
 // ============================================================================
 init_gamemodes()
 {
@@ -39,6 +46,9 @@ init_gamemodes()
     add_map_gamemode( "zgrief", undefined, undefined );
 
     add_map_location_gamemode( "zclassic", "tomb", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
+
+    add_map_location_gamemode( "zstandard", "crazy_place", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
+    add_map_location_gamemode( "zgrief", "crazy_place", clientscripts\mp\zm_tomb_classic::precache, clientscripts\mp\zm_tomb_classic::premain, clientscripts\mp\zm_tomb_classic::main );
 }
 
 include_weapons()

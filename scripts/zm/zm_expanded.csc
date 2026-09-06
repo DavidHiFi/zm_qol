@@ -491,6 +491,62 @@ struct_class_init()
 	zmqol_enable_wallbuys();
 	zmqol_add_semtex_wallbuy();
 	zmqol_add_claymore_wallbuy();   // v1.99.91 - twin of the diner location script
+	zmqol_add_crazy_place_wallbuys();   // v2.14.0 - twin of the Origins Crazy Place loc script
+}
+
+// ============================================================================
+//  THE CRAZY PLACE WALL-BUYS - CLIENT HALF                          (v2.14.0)
+//
+//  🛑 EXACT TWIN of scripts\zm\locs\zm_tomb_loc_crazy_place.gsc::
+//  zmqol_add_wallbuy(). Four guns on the four pillars of Origins' elemental
+//  chamber, at BO2-Reimagined's own mapents coordinates.
+//
+//  This is not cosmetic and it is not optional. _zm_weapons registers ONE
+//  "world" clientfield per spawned wall-buy, named "<weapon>_<origin>", on the
+//  server (_zm_weapons.gsc:1290) and on the client (_zm_weapons.csc:225), each
+//  from its own struct list. A struct added on one side only means one side
+//  registers a field the other does not and the engine drops every player at
+//  load. Origin, angles, weapon and the script_noteworthy tag must match the
+//  server copy character for character.
+//
+//  📝 Reimagined SHUFFLES these four between the pillars each match. That is
+//  only possible because their mapents tag them "disable_clientfield" and their
+//  own _zm_weapons replacement then skips this whole client half. Ours are
+//  fixed - see the header of the server copy.
+// ============================================================================
+zmqol_add_crazy_place_wallbuys()
+{
+	if ( getdvar( "mapname" ) != "zm_tomb" || getdvar( "ui_zm_mapstartlocation" ) != "crazy_place" )
+		return;
+
+	zmqol_add_crazy_place_wallbuy( "evoskorpion_zm", "t6_wpn_smg_scorpion_world", ( 10576, -8142, -383 ), ( 0, 315, 0 ) );
+	zmqol_add_crazy_place_wallbuy( "scar_zm",        "t6_wpn_ar_scarh_world",     ( 10104, -8142, -383 ), ( 0, 225, 0 ) );
+	zmqol_add_crazy_place_wallbuy( "mg08_zm",        "t6_wpn_zmb_mg08_world",     ( 10104, -7670, -383 ), ( 0, 135, 0 ) );
+	zmqol_add_crazy_place_wallbuy( "ksg_zm",         "t6_wpn_shotty_ksg_world",   ( 10576, -7670, -383 ), ( 0, 45, 0 ) );
+
+	println( "[zm_qol] CLIENT crazy place: 4 wallbuy struct pair(s) added" );
+}
+
+zmqol_add_crazy_place_wallbuy( str_weapon, str_model, v_origin, v_angles )
+{
+	str_target = "zmqol_cp_" + str_weapon;
+
+	s_model = spawnstruct();
+	s_model.targetname = str_target;
+	s_model.origin = v_origin;
+	s_model.angles = v_angles;
+	s_model.model = str_model;
+	s_model.script_noteworthy = "zstandard_crazy_place, zgrief_crazy_place";
+	zmqol_client_add_struct( s_model );
+
+	s_buy = spawnstruct();
+	s_buy.targetname = "weapon_upgrade";
+	s_buy.origin = v_origin;
+	s_buy.angles = v_angles;
+	s_buy.zombie_weapon_upgrade = str_weapon;
+	s_buy.target = str_target;
+	s_buy.script_noteworthy = "zstandard_crazy_place, zgrief_crazy_place";
+	zmqol_client_add_struct( s_buy );
 }
 
 // ============================================================================
@@ -675,11 +731,10 @@ zmqol_enable_wallbuys()
 		a_origins[a_origins.size] = ( -5489, -7982.7, 62 );        // mp5k_zm
 		a_origins[a_origins.size] = ( -6399.2, -7938.5, 207.25 );  // tazer_knuckles_zm
 	}
-	else if ( str_map == "zm_transit" && str_location == "tunnel" )
-	{
-		// zm_transit_loc_tunnel.gsc - registered for zstandard AND zgrief
-		a_origins[a_origins.size] = ( -11839, -1695.1, 287 );      // m16_zm
-	}
+	// 📝 v2.14.0 - the Tunnel branch is gone with the location (user: "remove
+	// tunnel survival"). It re-tagged one wall-buy, the M16 at
+	// (-11839, -1695.1, 287). Server twin removed in the same change, so the
+	// two sides still tag the same set.
 	else if ( str_map == "zm_buried" && str_location == "street" && str_gametype == "zstandard" )
 	{
 		// zm_buried_gamemodes.gsc - street_struct_init is registered for
